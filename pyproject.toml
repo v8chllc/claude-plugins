@@ -1,0 +1,64 @@
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+extend-exclude = '''
+/(
+  \.git
+  | \.venv
+  | __pycache__
+  | node_modules
+)/
+'''
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+extend-exclude = [
+  "__pycache__",
+  "node_modules",
+]
+
+[tool.ruff.lint]
+select = [
+  "B",
+  "E",
+  "F",
+  "I",
+  "UP",
+  "W",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.11"
+files = [
+  "plugins",
+  "tests",
+]
+exclude = [
+  "__pycache__",
+  "node_modules",
+]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+check_untyped_defs = true
+no_implicit_optional = true
+pretty = true
+
+[tool.pytest.ini_options]
+testpaths = [
+  "tests",
+]
+python_files = [
+  "test_*.py",
+]
+addopts = [
+  "-ra",
+  "--strict-config",
+  "--strict-markers",
+]
