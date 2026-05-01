@@ -1,0 +1,19 @@
+### Informational Review Findings Added
+
+*Cycle: ${cycle_suffix}*
+
+---
+
+This report shows the informational findings the human reviewer has included for the fix findings workflow. The agent reviewer notes findings as informational when the review process does not produce sufficient confidence that the finding should be fixed. Informational findings are not included in the review score. When the fix review workflow is run, informational findings added by the human reviewer are addressed.
+
+### Added Findings
+
+<!-- FORMAT RULE (machine-parsed by _INLINE_OPTED_IN_RE in recover_context.py):
+Each finding MUST follow exactly this line format — one finding per line, no wrapping:
+N. <title> — `<file-or-path>` (<reviewer-source>)
+Example:
+1. Dead variable in _run_json — `scripts/recover_context.py:228` (correctness-reviewer)
+Do NOT vary this format; the regex depends on the em-dash/hyphen, backticks, and parentheses. -->
+${findings_text}
+
+${closing_note}
