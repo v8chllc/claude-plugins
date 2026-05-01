@@ -1,0 +1,27 @@
+{
+  "name": "claude-plugins",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "lint:md": "markdownlint \"**/*.md\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/v8chllc/claude-plugins.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/v8chllc/claude-plugins/issues"
+  },
+  "homepage": "https://github.com/v8chllc/claude-plugins#readme",
+  "devDependencies": {
+    "markdownlint-cli": "^0.48.0"
+  }
+}
