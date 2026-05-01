@@ -7,7 +7,7 @@ from typer.testing import CliRunner
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parent.parent
-    / "codex/skills/consensus-review/scripts/post_review_comment.py"
+    / "plugins/v8ch/skills/consensus-review/scripts/post_review_comment.py"
 )
 
 
