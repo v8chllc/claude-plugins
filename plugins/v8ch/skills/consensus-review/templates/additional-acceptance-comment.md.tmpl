@@ -1,0 +1,22 @@
+### Review Findings Accepted: Human Reviewer
+
+*Cycle: ${cycle_suffix}*
+*Initial Score: ${before_score}*
+*Adjusted Score: ${after_score}*
+
+---
+
+This report shows the findings the human reviewer has accepted at the beginning of the fix findings workflow. When findings are accepted, the review score is recalculated excluding any penalty from accepted findings. When the fix review workflow is run, accepted findings are not addressed.
+
+### Accepted Findings
+
+<!-- FORMAT RULE (machine-parsed by _INLINE_ACCEPTED_RE in recover_context.py):
+Each finding MUST follow exactly this line format — one finding per line, no wrapping:
+N. [SEVERITY] <title> — `<file-or-path>`
+Example:
+1. [HIGH] Dead variable in _run_json — `scripts/recover_context.py:228`
+Do NOT vary this format; the regex depends on the bracketed severity, em-dash/hyphen, and backticks. -->
+${findings_text}
+${score_block}
+
+${closing_note}

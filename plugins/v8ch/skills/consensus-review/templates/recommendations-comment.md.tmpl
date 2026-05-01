@@ -1,0 +1,29 @@
+### Review Recommendations
+
+*Cycle: ${cycle_suffix}*
+
+---
+
+This report shows the findings the agent reviewer recommends for acceptance and for low-confidence opt-in. These are advisory only — the human reviewer decides whether to apply them in the next acceptance/opt-in step. Each line references the canonical `[F-REVIEW_NUMBER]` from the synthesizer's numbered report so the recommendations can be resolved back to the original review findings.
+
+### Recommended for Acceptance
+
+<!-- FORMAT RULE (machine-parsed by _INLINE_RECOMMENDATION_RE in recover_context.py):
+Each finding MUST follow exactly this line format — one finding per line, no wrapping:
+N. [F-REVIEW_NUMBER] [SEVERITY] <title> — `<file-or-path>`
+Example:
+1. [F-3] [HIGH] Dead variable in _run_json — `scripts/recover_context.py:228`
+Do NOT vary this format; the regex depends on the bracketed review number, bracketed severity, em-dash/hyphen, and backticks. -->
+${acceptance_findings_text}
+
+### Recommended for Opt-In
+
+<!-- FORMAT RULE (machine-parsed by _INLINE_RECOMMENDATION_RE in recover_context.py):
+Each finding MUST follow exactly this line format — one finding per line, no wrapping:
+N. [F-REVIEW_NUMBER] [SEVERITY] <title> — `<file-or-path>`
+Example:
+1. [F-7] [LOW] Stale comment reference — `src/util.py`
+Do NOT vary this format; the regex depends on the bracketed review number, bracketed severity, em-dash/hyphen, and backticks. -->
+${opt_in_findings_text}
+
+${closing_note}
