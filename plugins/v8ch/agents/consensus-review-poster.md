@@ -58,14 +58,10 @@ If review/fix text is provided inline, write it to a scratch file named `review-
 
 Determine review status using this ordered decision tree:
 
-1. **FULLY_CLEAN** — if ALL of the following are true:
-   - Plan Divergences section contains only `None.`
-   - Consensus Findings — Must Fix contains only `None.`
-   - Mandate-Gap Findings — Should Fix contains only `None.`
-   - score >= 95
+1. **PASSING_COMPLETE** — if score >= 95
    → Set status = `clean`
 
-2. **PASSING** — else if score >= 85
+2. **PASSING_FIX_REQUIRED** — else if score >= 85
    → Set status = `passing`
 
 3. **FAILING** — otherwise
@@ -75,16 +71,16 @@ Determine review status using this ordered decision tree:
 
 Write the summary to `{scratch-dir}/summary-{cycle:02d}.md`.
 
-**If FULLY_CLEAN:** write exactly:
+**If PASSING_COMPLETE:** write exactly:
 
 ```markdown
-- No actionable issues found. The agent reviewer confirmed the implementation is clean.
+- :white_check_mark: Review passed with a score of N/100. No fix workflow is required.
 ```
 
-**If PASSING:** write 3-6 short markdown bullet lines. The first line must be:
+**If PASSING_FIX_REQUIRED:** write 3-6 short markdown bullet lines. The first line must be:
 
 ```markdown
-- :yellow_circle: Review passed with a score of N/100. Minor findings remain. Address them to improve the score.
+- :yellow_circle: Review passed with a score of N/100. Run the fix workflow for recommended issues.
 ```
 
 Each remaining line must:
@@ -213,7 +209,7 @@ uv run <skill-dir>/scripts/post_review_comment.py \
 
 ## Recommendations Mode (`comment_type=recommendations`)
 
-Used to record the acceptance-recommender and opt-in-recommender outputs to the PR/MR thread. The comment is advisory only — see SKILL.md Step 4c for the full rule. Each line preserves the synthesizer's canonical `[F-REVIEW_NUMBER]` so the human reviewer can resolve recommendations back to the original findings.
+Used to record the acceptance-recommender and opt-in-recommender outputs to the PR/MR thread. The comment is advisory in interactive mode and the fixed input for autonomous acceptance/opt-in routing — see SKILL.md Step 4c for the full rule. Each line preserves the synthesizer's canonical `[F-REVIEW_NUMBER]` so recommendations can be resolved back to the original findings.
 
 Create two scratch files in the scratch directory:
 

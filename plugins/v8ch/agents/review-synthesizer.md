@@ -83,8 +83,8 @@ Start at 100. Apply deductions:
 You emit a single raw score. Acceptance-based score adjustments are computed downstream by the acceptance-recommender agent, not here.
 
 **Thresholds:**
-- Fully Clean: score ≥ 95 AND no must-fix/should-fix findings
-- Passing: score ≥ 85 (and not fully clean)
+- Passing, no required fix workflow: score ≥ 95
+- Passing, fix workflow required for recommended issues: score ≥ 85 and < 95
 - Failing: score < 85
 
 Floor at 1. Do not exceed 100.

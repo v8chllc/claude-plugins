@@ -6,6 +6,11 @@ Applies targeted fixes, posts fix-validation audit comments, runs code-quality t
 
 Run sub-steps 0 through 8 in order. The PR/MR thread is the durable source of truth. Temporary files may be created in a scratch directory only to pass comment-sourced review/fix text into scripts and agents.
 
+The orchestrator invokes this workflow in one of two autonomous modes:
+
+- **recommended-only** — used when the adjusted review score is already 85-94. Fix only guardrailed findings and current-cycle opt-in recommendations; do not add score-gap eligible findings.
+- **threshold** — used when the adjusted review score is below 85. Fix the minimum set needed to reach the 85 passing threshold, plus guardrailed findings and current-cycle opt-in recommendations.
+
 ## Step 0 — Resolve latest-cycle artifacts from comments
 
 Create or choose a scratch directory, then run:
@@ -24,7 +29,7 @@ The scratch review and fix files are regenerated from PR/MR comments and are not
 
 ## Step 1 — Fix-start additional acceptance
 
-If `AUTONOMOUS=true`, skip this step entirely. Per spec, additional acceptance is not offered in autonomous mode — the autonomous opt-in/acceptance choices were already made in the review skill's Step 5 (and surfaced via the recommendations comment).
+If `AUTONOMOUS=true`, skip this step entirely. Per spec, additional acceptance is not offered in autonomous mode. Do not post an `additional_acceptance` comment and do not add any newly accepted findings during the fix workflow. The autonomous acceptance choices were already made in the review skill's Step 5.
 
 Before invoking the fixer, give the operator one more chance to defer findings.
 
@@ -72,9 +77,9 @@ Always prompt fresh each cycle. Historical opt-ins in `RECOVERED_CONTEXT` are in
 
 **Autonomous (`AUTONOMOUS=true`):**
 
-Do not prompt. Read `current_cycle_opt_in_recommendations` from the recommendations comment surfaced via `recover_context.py` (the `RESOLVER_SUMMARY` exposes this list, and the scratch file `opt-in-recommendations-{cycle:02d}.md` contains the full text).
+Do not prompt. Read `current_cycle_opt_in_recommendations` from the recommendations comment surfaced via `recover_context.py` (the `RESOLVER_SUMMARY` exposes this list, and the scratch file `opt-in-recommendations-{cycle:02d}.md` contains the full text). This list is the only source of autonomous low-confidence opt-ins.
 
-1. Treat that list as `OPTED_IN_LOW_CONF` for Step 3.
+1. Treat exactly that list as `OPTED_IN_LOW_CONF` for Step 3.
 2. If `OPTED_IN_LOW_CONF` is non-empty, invoke `consensus-review-poster` to post a `low_confidence_opt_in` comment with those items. Pass:
    - comment type: `low_confidence_opt_in`
    - the opted-in low-confidence findings (from the recommender)
@@ -83,7 +88,7 @@ Do not prompt. Read `current_cycle_opt_in_recommendations` from the recommendati
    - repo dir, skill dir, and scratch directory
 3. If the recommender list is empty, skip posting and proceed with an empty `OPTED_IN_LOW_CONF`.
 
-Historical opt-ins from earlier cycles in `RECOVERED_CONTEXT` are informational only and are not carried over.
+Never add low-confidence findings outside the current-cycle recommender list in autonomous mode. Historical opt-ins from earlier cycles in `RECOVERED_CONTEXT` are informational only and are not carried over.
 
 ## Step 3 — Invoke fixer
 
@@ -92,10 +97,16 @@ Invoke `consensus-review-fixer` with:
 - Full `RESOLVER_SUMMARY` and `RECOVERED_CONTEXT` from PR/MR comments
 - Cycle number: `CYCLE`
 - Scratch directory for the temporary fix log
-- Target threshold: 85 (passing) — or 95 if user explicitly requests "clean" target
+- Fix mode:
+  - `recommended-only` when the orchestrator routed a score of 85-94
+  - `threshold` when the orchestrator routed a score below 85
+  - `clean` only if an interactive operator explicitly requested a clean target
+- Target threshold:
+  - 85 for `recommended-only` and `threshold`
+  - 95 for `clean`
 - Opted-in low-confidence finding titles: `OPTED_IN_LOW_CONF` plus any current-cycle opt-ins recovered in `RESOLVER_SUMMARY` (possibly empty)
 
-The fixer owns the full Target Thresholds specification and the Score-Gap Targeting Strategy — see `plugins/vault/agents/consensus-review-fixer.md` for the authoritative description of both behaviors. To target clean, explicitly pass `target_threshold: 95` to the fixer.
+The fixer owns the full Target Thresholds specification and the Score-Gap Targeting Strategy — see `plugins/vault/agents/consensus-review-fixer.md` for the authoritative description of both behaviors. To target clean, explicitly pass `fix_mode: clean` and `target_threshold: 95` to the fixer.
 
 ## Step 4 — Read fixer signal
 
@@ -154,7 +165,7 @@ Guard: run only if Step 7 created commits.
 
 If Step 6 surfaced unresolved `code-quality` failures, re-surface them now alongside the push report so the operator knows follow-up is required.
 
-In autonomous mode (`AUTONOMOUS=true`), emit terminal signal blocks as the final output:
+In autonomous mode (`AUTONOMOUS=true`), report terminal signal blocks to the orchestrator. If this fix workflow is running inside the autonomous review/fix loop, the orchestrator may use `PUSH_COMPLETE` as the signal to start the next review cycle instead of stopping.
 
 - On a successful push, emit `PUSH_COMPLETE` with the pushed commit SHAs in `details` (for example: `{"signal": "PUSH_COMPLETE", "cycle": N, "details": {"shas": ["abc123", "def456"], "url": "<pr-or-mr-url>"}}`).
 - If the fixer reported `BLOCKERS_REMAIN` in Step 4, emit the `BLOCKERS_REMAIN` signal here as the terminal signal instead of `PUSH_COMPLETE` (the partial fixes that landed are still pushed; the cycle ends without a clean push).
