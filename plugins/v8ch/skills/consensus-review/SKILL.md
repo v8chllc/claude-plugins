@@ -11,28 +11,31 @@ Orchestrates three independent reviewer agents and one synthesis agent to produc
 
 Before running Step 0, parse the user's trigger phrase to decide between **interactive** and **autonomous** modes. Set the `AUTONOMOUS` flag once and use it for the rest of the run.
 
-Set `AUTONOMOUS=true` when either of the following matches the trigger:
+Autonomous mode is the default. Set `AUTONOMOUS=false` only when the trigger explicitly requests operator prompts with one of the interactive keywords below.
 
-- The phrase matches the regex `\b(autonomous|autonomously|non-interactive)\b`, case-insensitive.
-- The phrase contains the literal sentinel `[rouge-workflow]`.
+Set `AUTONOMOUS=false` when the trigger phrase matches the regex `\b(interactive|manually|manual|prompt|ask-me|with-confirmation)\b`, case-insensitive.
 
-Otherwise set `AUTONOMOUS=false`.
+Otherwise set `AUTONOMOUS=true`.
 
 **Trigger examples:**
 
-- `review PR 123` → `AUTONOMOUS=false` (interactive default).
-- `review PR 123 autonomously` → `AUTONOMOUS=true`.
-- `run a non-interactive consensus review on MR 47` → `AUTONOMOUS=true`.
-- `[rouge-workflow] consensus review for PR 9` → `AUTONOMOUS=true` (the `[rouge-workflow]` sentinel is added by Rouge automation and forces autonomous mode regardless of other wording).
+- `review PR 123` → `AUTONOMOUS=true` (autonomous default).
+- `review PR 123 interactively` → `AUTONOMOUS=false`.
+- `run a manual consensus review on MR 47` → `AUTONOMOUS=false`.
+- `review PR 9 with-confirmation` → `AUTONOMOUS=false`.
 
 In autonomous mode, do not prompt the operator for any input during the run. Steps that would otherwise prompt must instead use the documented autonomous branch or emit a `consensus-review-signal` block (see "Exit signals" appendix) and stop.
+
+### Autonomous cycle limit
+
+Set `MAX_AUTONOMOUS_CYCLES=5`. Each completed review is one cycle. In autonomous mode, never start a sixth review cycle. If cycle 5 finishes with a routing result that would require another fix/review pass, emit the `MAX_CYCLES_REACHED` exit signal block with the latest score, review URL when available, and remaining findings or blockers in `details`, then stop.
 
 ### Trigger-phrase parsing
 
 The trigger phrase is parsed once at the start of the run. The full set of recognized tokens:
 
-- **Autonomous keywords:** `autonomous`, `autonomously`, `non-interactive` (regex `\b(autonomous|autonomously|non-interactive)\b`, case-insensitive). Any match sets `AUTONOMOUS=true`.
-- **Sentinel:** the literal string `[rouge-workflow]`. Its presence sets `AUTONOMOUS=true`.
+- **Interactive keywords:** `interactive`, `manually`, `manual`, `prompt`, `ask-me`, `with-confirmation` (regex `\b(interactive|manually|manual|prompt|ask-me|with-confirmation)\b`, case-insensitive). Any match sets `AUTONOMOUS=false`.
+- **Autonomous keywords:** `autonomous`, `autonomously`, `non-interactive` are accepted for readability but are no longer required. They leave `AUTONOMOUS=true` unless an interactive keyword is also present.
 - **Optional `on_quality_failure: abort` token** — recognized in autonomous mode only. If the trigger phrase contains the literal token `on_quality_failure: abort`, set the fix-workflow Step 6 failure policy to `abort` (see `references/fix-workflow.md` Step 6). Any other value, or no token, leaves the policy at the default `continue`. In interactive mode this token is ignored.
 
 ## Prerequisites
@@ -208,7 +211,7 @@ Recommender failure rule: if either recommender fails or returns an error, treat
 - The cycle number: `CYCLE`
 - The repo dir, skill dir, and scratch directory as usual
 
-This comment is advisory only — it does not adjust scores and does not auto-apply findings. Report the recommendations comment URL alongside the review comment URL.
+This comment is advisory only in interactive mode. In autonomous mode, it is the fixed input for automatic acceptance and low-confidence opt-in decisions in the current cycle. Report the recommendations comment URL alongside the review comment URL.
 
 ### Step 5 — Acceptance (PR/MR number given)
 
@@ -248,9 +251,23 @@ Do not prompt. If the acceptance-recommender produced one or more recommended-fo
 
 If the acceptance-recommender returned "None." (or failed and was treated as empty in Step 4b), skip this step and proceed to Step 6 without posting an acceptance comment.
 
-### Step 6 — Fix issues (optional, PR/MR number required)
+### Step 6 — Route by score and optionally fix (PR/MR number required)
+
+Use the adjusted score after Step 5 acceptance when acceptance occurred; otherwise use the raw synthesizer score.
+
+**Interactive (`AUTONOMOUS=false`):**
 
 When the user asks to fix issues from the review, run the fix workflow defined in `references/fix-workflow.md`.
+
+**Autonomous (`AUTONOMOUS=true`):**
+
+The autonomous workflow runs unattended and owns the review/fix loop:
+
+1. If no PR/MR number was provided, emit `ABORT` with `details.reason="missing_pr_or_mr"` and stop. Local reviews do not have a durable audit trail and are not eligible for autonomous fixing.
+2. If score >= 95, stop successfully. No fix workflow is required.
+3. If 85 <= score < 95, run the fix workflow in **recommended-only** mode, then loop back to Step 0 for the next review cycle.
+4. If score < 85, run the fix workflow in **threshold** mode, targeting the 85 passing threshold, then loop back to Step 0 for the next review cycle.
+5. Before looping, check `MAX_AUTONOMOUS_CYCLES`. If the next review would exceed 5 cycles, emit `MAX_CYCLES_REACHED` and stop.
 
 The fix workflow covers: fix-start additional acceptance, low-confidence opt-in, fixer invocation, fixer signal handling, fix validation posting, code quality tooling, commit composition, and push to the PR branch.
 
@@ -264,7 +281,7 @@ In autonomous mode the skill cannot prompt for input, so it communicates termina
 {"signal": "<value>", "cycle": N, "details": {...}}
 ```
 
-- `signal` is one of the five values listed below.
+- `signal` is one of the values listed below.
 - `cycle` is the current cycle number as an integer (e.g. `1`, `3`).
 - `details` is a free-form JSON object with whatever context the caller will need to act on the signal. Keep keys short and lowercase.
 
@@ -274,6 +291,7 @@ Exit signal values:
 - **`QUALITY_FAILURES`** — code-quality tooling failed during a fix workflow and the failures could not be resolved automatically. Use this signal to surface lint, format, type, or test failures that block the fix from being committed.
 - **`PUSH_COMPLETE`** — fixes were applied, validated, committed, and pushed successfully. The autonomous run completed its work for this cycle.
 - **`BLOCKERS_REMAIN`** — the fixer ran but at least one finding still has status `unresolved` or `partial` after fix validation. The cycle ends without a clean push.
+- **`MAX_CYCLES_REACHED`** — autonomous review/fix routing reached `MAX_AUTONOMOUS_CYCLES=5` and another pass would be required. Include the latest score, latest review URL when available, and remaining findings or blockers in `details`.
 - **`ABORT`** — an unrecoverable error prevented the workflow from continuing (for example, a missing dependency, an unauthenticated `gh`/`glab` client, or a malformed plan file). Include the failing step and a short error string in `details`.
 
 The interactive path does not emit signal blocks. It returns text and prompts to the operator as before.

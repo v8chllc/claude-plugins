@@ -18,7 +18,8 @@ You receive:
 - **Recovered context** — markdown output from `recover_context.py`, sourced from PR/MR comments.
 - **Cycle number** — the current cycle ordinal (e.g. `3`).
 - **Scratch directory** — directory where you may write the temporary fix log for the poster.
-- **Target threshold** — 85 (passing) or 95 (clean) — default 85.
+- **Fix mode** — `recommended-only`, `threshold`, or `clean` — default `threshold`.
+- **Target threshold** — 85 for `recommended-only` and `threshold`, or 95 for `clean`.
 - **Opted-in low-confidence finding titles** — list of finding titles (possibly empty) explicitly selected in the low-confidence opt-in step. Treat each opted-in title as guardrailed.
 
 ## Step 1 — Load prior context
@@ -60,11 +61,13 @@ Build three working lists:
 - Operator-accepted findings from the current or prior cycles
 - Low-confidence findings NOT in the current opted-in list
 
-## Target Thresholds
+## Fix Modes and Target Thresholds
 
-The operator selects one of two thresholds via the `target_threshold` input. The threshold controls how the fix set is built in the Score-Gap Targeting Strategy below.
+The orchestrator selects a fix mode and target threshold. The mode controls how the fix set is built in the Score-Gap Targeting Strategy below.
 
-- **passing (85)** — default target. Close the score gap to 85 using the minimum set of eligible findings needed to get there, plus all guardrailed findings. Eligible findings are added greedily by score impact. Additional findings outside the fix set are deferred as non-blocking.
+- **recommended-only (85)** — used when the score is already 85-94. Address guardrailed findings and current-cycle opted-in low-confidence recommendations only. Do not add eligible score-gap findings.
+
+- **threshold (85)** — default target. Close the score gap to 85 using the minimum set of eligible findings needed to get there, plus all guardrailed findings. Eligible findings are added greedily by score impact. Additional findings outside the fix set are deferred as non-blocking.
 
 - **clean (95)** — opt-in target. Address every must-fix and should-fix finding in the review: all guardrailed findings plus all eligible consensus and mandate-gap findings (CRITICAL/HIGH/MEDIUM/LOW). Low-confidence findings remain excluded unless the operator opted them in. Use when the PR must be fully clean before merge. A successful clean cycle exits only when both conditions hold: score >= 95 AND no must-fix/should-fix findings remain unresolved in the fix set.
 
@@ -72,9 +75,14 @@ The operator selects one of two thresholds via the `target_threshold` input. The
 
 1. Read current score from the review text.
 2. Compute gap = target_threshold - current_score.
-3. Build fix set based on `target_threshold`:
+3. Build fix set based on `fix_mode`:
 
-   **If target_threshold == 85 (passing):**
+   **If fix_mode == "recommended-only":**
+   a. Add ALL guardrailed findings unconditionally, including any opted-in low-confidence findings.
+   b. Do not add any eligible findings for score-gap closure, even if the score is below 95.
+   c. Report all eligible findings outside the fix set as deferred because the workflow is recommendation-limited.
+
+   **If fix_mode == "threshold":**
    a. Add ALL guardrailed findings unconditionally, including any opted-in low-confidence findings.
    b. If gap <= 0, skip eligible findings entirely — only guardrailed fixes run.
    c. If gap > 0, rank eligible findings by score impact (highest first):
@@ -86,7 +94,7 @@ The operator selects one of two thresholds via the `target_threshold` input. The
       - LOW mandate-gap: 1 point
    d. Add eligible findings in rank order until cumulative impact >= gap. Remaining eligible findings are deferred.
 
-   **If target_threshold == 95 (clean):**
+   **If fix_mode == "clean":**
    a. Add ALL guardrailed findings unconditionally, including any opted-in low-confidence findings.
    b. Add ALL eligible findings regardless of score impact — every consensus (MEDIUM, LOW) and mandate-gap (CRITICAL, HIGH, MEDIUM, LOW) finding.
    c. Low-confidence findings not in the opted-in list remain excluded.
@@ -168,8 +176,8 @@ Bullet list of anything unresolved that could affect the next cycle. Write "None
 
 Report a structured signal to the orchestrator:
 
-- `ALL_RESOLVED`: N findings fixed (target: {passing|clean}, score gap closed)
-- `BLOCKERS_REMAIN`: M of N findings unresolved after X total attempts (target: {passing|clean}, gap remaining: Y points)
+- `ALL_RESOLVED`: N findings fixed (mode: {recommended-only|threshold|clean}, score gap closed if applicable)
+- `BLOCKERS_REMAIN`: M of N findings unresolved after X total attempts (mode: {recommended-only|threshold|clean}, gap remaining: Y points)
 - `THRESHOLD_REACHED`: Score target reached (N findings fixed, M deferred as non-blocking)
 
 Also report the scratch fix-log path so the poster can post the fix-validation comment.
