@@ -1,0 +1,17 @@
+{
+  "name": "vich",
+  "owner": {
+    "name": "vich"
+  },
+  "metadata": {
+    "description": "Public marketplace for AI coding agent skills and plugins from V8CH LLC.",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "v8ch",
+      "source": "./plugins/v8ch",
+      "description": "Global skills for AI coding workflows: code review."
+    }
+  ]
+}
