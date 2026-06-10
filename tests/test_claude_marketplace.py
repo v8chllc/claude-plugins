@@ -12,7 +12,7 @@ def load_json(path: Path) -> dict[str, object]:
 def test_marketplace_points_to_valid_plugin_manifest() -> None:
     marketplace = load_json(MARKETPLACE_PATH)
 
-    assert marketplace["name"] == "vich"
+    assert marketplace["name"] == "v8ch"
     plugins = marketplace["plugins"]
     assert isinstance(plugins, list)
     assert len(plugins) == 1
