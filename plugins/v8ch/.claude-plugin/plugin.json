@@ -1,0 +1,21 @@
+{
+  "name": "v8ch",
+  "version": "1.0.0",
+  "description": "Reusable Claude Code workflows for code review and project memory.",
+  "author": {
+    "name": "V8CH LLC",
+    "url": "https://github.com/v8chllc"
+  },
+  "homepage": "https://github.com/v8chllc/claude-plugins",
+  "repository": "https://github.com/v8chllc/claude-plugins",
+  "license": "MIT",
+  "keywords": [
+    "claude",
+    "code-review",
+    "memory",
+    "skills",
+    "developer-tools"
+  ],
+  "skills": "./skills/",
+  "agents": "./agents/"
+}
