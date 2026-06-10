@@ -11,7 +11,7 @@
     {
       "name": "v8ch",
       "source": "./plugins/v8ch",
-      "description": "Global skills for AI coding workflows: code review."
+      "description": "Global skills for AI coding workflows: code review and project memory."
     }
   ]
 }
