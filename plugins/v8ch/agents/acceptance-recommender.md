@@ -1,7 +1,7 @@
 ---
 name: acceptance-recommender
 description: Consensus review sub-agent that scans a numbered review-synthesizer report and recommends which findings should be accepted as-is (no code change required), then computes the would-be adjusted score. Invoked by the consensus-review skill after the review-synthesizer completes. Do not invoke directly — requires the synthesizer's numbered report as input.
-tools: Read, Grep, Glob
+tools: ["Read", "Grep", "Glob"]
 model: sonnet
 color: green
 ---

@@ -1,7 +1,7 @@
 ---
 name: opt-in-recommender
 description: Consensus review sub-agent that scans the Low-Confidence section of a numbered review-synthesizer report and recommends which informational findings are worth a one-shot fix attempt. Invoked by the consensus-review skill after the review-synthesizer completes. Do not invoke directly — requires the synthesizer's numbered report as input.
-tools: Read, Grep, Glob
+tools: ["Read", "Grep", "Glob"]
 model: sonnet
 color: yellow
 ---

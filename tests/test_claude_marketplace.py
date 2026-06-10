@@ -1,12 +1,31 @@
 import json
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MARKETPLACE_PATH = REPO_ROOT / ".claude-plugin" / "marketplace.json"
+ALLOWED_AGENT_COLORS = {"blue", "cyan", "green", "yellow", "magenta", "red"}
 
 
 def load_json(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def parse_frontmatter(path: Path) -> dict[str, Any]:
+    text = path.read_text(encoding="utf-8")
+    assert text.startswith("---\n")
+    raw_header = text.split("---", 2)[1]
+    header: dict[str, Any] = {}
+    for raw_line in raw_header.splitlines():
+        if not raw_line or ":" not in raw_line:
+            continue
+        key, raw_value = raw_line.split(":", 1)
+        value = raw_value.strip()
+        if value.startswith("["):
+            header[key] = json.loads(value)
+        else:
+            header[key] = value
+    return header
 
 
 def test_marketplace_points_to_valid_plugin_manifest() -> None:
@@ -61,6 +80,27 @@ def test_all_plugin_skills_have_metadata() -> None:
         header = text.split("---", 2)[1]
         assert "\nname:" in f"\n{header}"
         assert "\ndescription:" in f"\n{header}"
+
+
+def test_plugin_agents_use_claude_plugin_frontmatter() -> None:
+    agent_root = REPO_ROOT / "plugins" / "v8ch" / "agents"
+    agent_files = sorted(agent_root.glob("*.md"))
+    assert {path.stem for path in agent_files} == {
+        "acceptance-recommender",
+        "consensus-review-fixer",
+        "consensus-review-poster",
+        "opt-in-recommender",
+        "review-synthesizer",
+    }
+
+    for agent_file in agent_files:
+        frontmatter = parse_frontmatter(agent_file)
+        assert frontmatter["name"] == agent_file.stem
+        assert frontmatter["description"]
+        assert frontmatter["model"] in {"inherit", "sonnet", "opus", "haiku"}
+        assert frontmatter["color"] in ALLOWED_AGENT_COLORS
+        assert isinstance(frontmatter["tools"], list)
+        assert all(isinstance(tool, str) and tool for tool in frontmatter["tools"])
 
 
 def test_remember_skill_uses_manual_load_and_explicit_setup() -> None:
