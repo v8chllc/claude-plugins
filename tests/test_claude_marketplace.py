@@ -46,22 +46,19 @@ def test_marketplace_points_to_valid_plugin_manifest() -> None:
 
     manifest = load_json(plugin_root / ".claude-plugin" / "plugin.json")
     assert manifest["name"] == entry["name"]
-    assert manifest["version"] == "1.0.0"
+    assert manifest["version"] == "1.0.1"
     assert manifest["description"]
 
 
-def test_plugin_manifest_component_paths_exist() -> None:
+def test_plugin_manifest_uses_default_component_discovery() -> None:
     manifest_path = REPO_ROOT / "plugins" / "v8ch" / ".claude-plugin" / "plugin.json"
     manifest = load_json(manifest_path)
     plugin_root = manifest_path.parent.parent
 
-    for component in ("skills", "agents"):
-        value = manifest[component]
-        assert isinstance(value, str)
-        assert value.startswith("./")
-        component_path = (plugin_root / value).resolve()
-        assert component_path.is_relative_to(plugin_root.resolve())
-        assert component_path.is_dir()
+    assert "skills" not in manifest
+    assert "agents" not in manifest
+    assert (plugin_root / "skills").is_dir()
+    assert (plugin_root / "agents").is_dir()
 
 
 def test_all_plugin_skills_have_metadata() -> None:
