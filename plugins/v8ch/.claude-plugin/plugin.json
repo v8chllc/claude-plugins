@@ -1,6 +1,6 @@
 {
   "name": "v8ch",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Reusable Claude Code workflows for code review and project memory.",
   "author": {
     "name": "V8CH LLC",
@@ -15,7 +15,5 @@
     "memory",
     "skills",
     "developer-tools"
-  ],
-  "skills": "./skills/",
-  "agents": "./agents/"
+  ]
 }
