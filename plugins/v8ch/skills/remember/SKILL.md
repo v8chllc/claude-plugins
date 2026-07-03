@@ -16,6 +16,8 @@ See `references/claude-md-directive.md` for the legacy generated directive block
 that setup may remove from `CLAUDE.md` only by exact match.
 See `references/journal-format.md` for journal entry format and dedupe marker spec.
 See `references/procedural-targets.md` for the approved procedural target allowlist.
+Use `scripts/validate_memory.py` for deterministic memory validation, JSON
+reporting, and setup-aware Memory Fast-Track steering checks.
 
 ---
 
@@ -27,6 +29,11 @@ See `references/procedural-targets.md` for the approved procedural target allowl
 **Setup — any of:**
 - `/remember setup`
 - Natural language: "setup remember", "remember in this project", "initialize memory here"
+
+**Validation:**
+- `/remember validate`
+- `/remember validate --json`
+- Natural language: "validate remember", "validate memory"
 
 **Journal write:**
 - `/remember session`
@@ -121,6 +128,15 @@ Triggered by `/remember setup` or natural language setup phrases.
 5. Do not create `CLAUDE.md` and do not inject a memory-load directive.
 6. Confirm to the user with a summary of files created, existing files reused,
    directive cleanup performed, and any manual review needed.
+7. Run validation and steering detection from the repository root:
+   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude --check-steering`.
+   Report the validation status and issues. Validation must not mutate files.
+8. If `CLAUDE.md` is missing a `## Memory Fast-Track Workflow` section, report
+   the gap and ask whether to append generated Claude-appropriate guidance.
+   Apply it only after user approval with:
+   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude --apply-fast-track`.
+   If `CLAUDE.md` has related but non-matching fast-track guidance, avoid
+   destructive edits and ask for manual review or explicit approval.
 
 ### Status report
 
@@ -128,6 +144,10 @@ After core memory is confirmed present, inspect and report:
 
 - **Journal lane**: is `.remember/memory/` present? List today's journal file if it exists.
 - **Procedural targets**: for each of `CODING_STANDARDS.md`, `ARCHITECTURE_STANDARDS.md`, `WORKFLOW_STANDARDS.md` — present or missing? Report as optional managed targets. Do not create them automatically; offer stubs only on request.
+- **Validation**: summarize pass/fail counts and actionable issues from
+  `scripts/validate_memory.py`.
+- **Memory Fast-Track steering**: report present, missing, added after approval,
+  skipped, or manual-review-needed.
 
 ---
 
@@ -192,6 +212,10 @@ Invoked by the `recommend` skill (`/recommend curated`).
 6. Present recommendations only; do not write automatically.
 7. For each recommendation include: action, type, subject, reason it is durable, proposed entry text using the template from `references/types.md`.
 8. Ask which to apply. On approval, continue through Workflow C from duplicate check.
+9. Before writing approved entries, run validation:
+   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude`.
+   If validation fails, report the issues and do not write unless the user
+   explicitly confirms proceeding despite the malformed memory state.
 
 ---
 
@@ -208,6 +232,10 @@ Invoked by the `recommend` skill (`/recommend session`).
 6. Dedupe curated candidates against `.remember/MEMORY.md`; dedupe procedural candidates against their respective target files.
 7. Present recommendations grouped by target and action: `add`, `update`, `skip`. List unsupported procedural candidates separately with a note.
 8. Apply only approved changes. For curated approvals, continue through Workflow C. For procedural approvals, continue through Workflow I.
+9. Before applying approved curated or procedural changes, run validation:
+   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude`.
+   If validation fails, report the issues and do not write unless the user
+   explicitly confirms proceeding despite the malformed memory state.
 
 ---
 
@@ -224,6 +252,10 @@ Invoked by the `recommend` skill (`/recommend procedural`).
 6. Classify candidates as `add`, `update`, or `skip` against the file's current content.
 7. Propose a concise patch per target. Present for user review.
 8. Apply only approved changes (Workflow I).
+9. Before applying approved procedural changes, run validation:
+   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude`.
+   If validation fails, report the issues and do not write unless the user
+   explicitly confirms proceeding despite the malformed memory state.
 
 ---
 
@@ -265,6 +297,27 @@ Triggered by `/remember review`, "review memory", "audit memories", or "clean up
 5. For `todo` entries classified as `act`, propose new work items (title, description, suggested tracking mechanism). Do not create automatically.
 6. Respond with a concise summary: total entries reviewed, counts per classification, memories to remove, memories to act upon, proposed work items.
 7. Ask which removals and actions to apply. On approval: remove entries, create work items if requested (e.g., `gh issue create`), update `todo` entries with the `Work item` field.
+
+---
+
+## Workflow K: Validate (`/remember validate`)
+
+Triggered by `/remember validate`, `/remember validate --json`, "validate
+remember", or "validate memory".
+
+1. Run `scripts/validate_memory.py` from the repository root:
+   - Human-readable: `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude --check-steering`
+   - JSON: `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude --check-steering --json`
+2. Validation checks `.remember/MEMORY.md` for required type sections, known
+   entry markers, required fields, and duplicate active `context` entries.
+3. Validation checks `.remember/memory/YYYY-MM-DD.md` journal filenames and
+   `remember-journal` metadata blocks.
+4. Validation reports issues without mutating files by default. Only append
+   generated Memory Fast-Track steering after explicit user approval with
+   `--apply-fast-track`.
+5. JSON output includes overall `status`, `counts`, and `issues` containing
+   `severity`, `code`, `path`, `message`, and optional `suggested_fix`.
+6. Respond with the helper output and a concise next action for any failures.
 
 ---
 
