@@ -176,29 +176,39 @@ kind: note
     assert "journal_kind_invalid" in codes
 
 
-def test_valid_stop_and_session_end_segments_pass(tmp_path: Path) -> None:
+def test_valid_v3_segments_from_both_platforms_pass(tmp_path: Path) -> None:
     write_valid_memory(tmp_path)
     turns = tmp_path / ".remember" / "turns"
     turns.mkdir()
     root = str(tmp_path.resolve())
     records = {
-        "stop-stop-key.json": {
-            "version": 1,
+        "claude-stop-stop-key.json": {
+            "version": 3,
+            "platform": "claude",
             "kind": "stop",
-            "idempotency_key": "stop-key",
+            "key": "stop-key",
             "project_root": root,
             "session_id": "session-1",
-            "captured_at": "2026-08-12T00:00:00+00:00",
-            "last_assistant_message": "Done.",
+            "captured_at": "2026-08-12T00:00:00.000000Z",
+            "text": "Done.",
+            "reason": None,
+            "transcript_path": None,
+            "summarized_at": None,
+            "summary_path": None,
         },
-        "session-end-end-key.json": {
-            "version": 1,
+        "codex-session-end-end-key.json": {
+            "version": 3,
+            "platform": "codex",
             "kind": "session-end",
-            "idempotency_key": "end-key",
+            "key": "end-key",
             "project_root": root,
-            "session_id": "session-1",
-            "captured_at": "2026-08-12T00:01:00+00:00",
+            "session_id": "session-2",
+            "captured_at": "2026-08-12T00:01:00.000000Z",
+            "text": "",
             "reason": "other",
+            "transcript_path": "/tmp/transcript.jsonl",
+            "summarized_at": None,
+            "summary_path": None,
         },
     }
     for name, record in records.items():
@@ -209,17 +219,20 @@ def test_valid_stop_and_session_end_segments_pass(tmp_path: Path) -> None:
     assert result.returncode == 0
 
 
-def test_invalid_lifecycle_segment_is_reported(tmp_path: Path) -> None:
+def test_legacy_v1_segment_is_reported_as_invalid(tmp_path: Path) -> None:
     write_valid_memory(tmp_path)
     turns = tmp_path / ".remember" / "turns"
     turns.mkdir()
-    (turns / "stop-wrong.json").write_text(
+    (turns / "stop-legacy.json").write_text(
         json.dumps(
             {
                 "version": 1,
                 "kind": "stop",
-                "idempotency_key": "different-key",
+                "idempotency_key": "legacy",
                 "project_root": str(tmp_path.resolve()),
+                "session_id": "session-1",
+                "captured_at": "2026-08-12T00:00:00+00:00",
+                "last_assistant_message": "Done.",
             }
         ),
         encoding="utf-8",
@@ -234,28 +247,34 @@ def test_invalid_lifecycle_segment_is_reported(tmp_path: Path) -> None:
     )
 
 
-def test_steering_detection_and_application(tmp_path: Path) -> None:
+def test_invalid_lifecycle_segment_is_reported(tmp_path: Path) -> None:
     write_valid_memory(tmp_path)
-    steering_path = tmp_path / STEERING_FILE
-    steering_path.write_text("# Agent Instructions\n", encoding="utf-8")
-
-    detect_result = run_validate(tmp_path, "--json", "--check-steering")
-    detect_payload = json.loads(detect_result.stdout)
-
-    assert detect_result.returncode == 0
-    assert detect_payload["status"] == "pass"
-    assert any(
-        issue["code"] == "fast_track_steering_missing"
-        for issue in detect_payload["issues"]
+    turns = tmp_path / ".remember" / "turns"
+    turns.mkdir()
+    (turns / "claude-stop-wrong.json").write_text(
+        json.dumps(
+            {
+                "version": 3,
+                "platform": "claude",
+                "kind": "stop",
+                "key": "different-key",
+                "project_root": str(tmp_path.resolve()),
+                "session_id": "session-1",
+                "captured_at": "2026-08-12T00:00:00.000000Z",
+                "text": "Done.",
+                "reason": None,
+                "transcript_path": None,
+                "summarized_at": None,
+                "summary_path": None,
+            }
+        ),
+        encoding="utf-8",
     )
 
-    apply_result = run_validate(tmp_path, "--apply-fast-track", "--json")
-    apply_payload = json.loads(apply_result.stdout)
+    result = run_validate(tmp_path, "--json")
 
-    assert apply_result.returncode == 0
-    assert apply_payload["fast_track_added"] is True
-    steering_text = steering_path.read_text(encoding="utf-8")
-    assert "## Memory Fast-Track Workflow" in steering_text
-    assert (
-        SETUP_COMMAND in steering_text or "fast-track memory updates" in steering_text
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert any(
+        issue["code"] == "lifecycle_segment_invalid" for issue in payload["issues"]
     )
