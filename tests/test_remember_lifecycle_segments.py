@@ -79,7 +79,7 @@ def record(
 
 def write(root: Path, payload: dict[str, Any]) -> Path:
     turns(root).mkdir(parents=True, exist_ok=True)
-    name = SEGMENTS.segment_filename(
+    name: str = SEGMENTS.segment_filename(
         payload["platform"], payload["kind"], payload["key"]
     )
     path = turns(root) / name
@@ -88,7 +88,8 @@ def write(root: Path, payload: dict[str, Any]) -> Path:
 
 
 def read(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    return data
 
 
 def run_cli(root: Path, *args: str) -> dict[str, Any]:

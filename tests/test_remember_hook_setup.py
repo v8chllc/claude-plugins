@@ -6,6 +6,7 @@ import os
 import stat
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -37,8 +38,11 @@ def project(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def settings(root: Path) -> dict:
-    return json.loads((root / ".claude" / "settings.json").read_text(encoding="utf-8"))
+def settings(root: Path) -> dict[str, Any]:
+    data: dict[str, Any] = json.loads(
+        (root / ".claude" / "settings.json").read_text(encoding="utf-8")
+    )
+    return data
 
 
 def commands(root: Path, event: str) -> list[str]:
