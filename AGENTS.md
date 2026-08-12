@@ -17,6 +17,12 @@ typing, and testing expectations, read `CODING_STANDARDS.md`.
   `node_modules/`, or tool caches.
 - If a plugin introduces its own package metadata or test runner, update the
   relevant documentation alongside the code change.
+- Whenever any file under `plugins/<name>/` changes, bump the version in
+  `plugins/<name>/.claude-plugin/plugin.json` in the same pull request. A merged
+  change with no version bump ships a version already present in installed
+  caches, so clients have nothing to refetch and keep running the old code.
+- `tests/test_claude_marketplace.py` pins the expected version literally, so it
+  moves in the same commit as the bump.
 
 ## Validation
 
