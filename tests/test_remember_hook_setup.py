@@ -73,6 +73,20 @@ def test_enable_requires_initialized_memory(tmp_path: Path) -> None:
     assert not (tmp_path / ".claude").exists()
 
 
+def test_enable_does_not_register_a_handler_that_failed_to_install(
+    project: Path, monkeypatch
+) -> None:
+    def fail_install(root: Path, channel) -> Path:
+        raise SETUP.SetupError("install failed")
+
+    monkeypatch.setattr(SETUP, "install_handler", fail_install)
+
+    with pytest.raises(SETUP.SetupError, match="install failed"):
+        SETUP.enable(project, STOP)
+
+    assert not (project / ".claude" / "settings.json").exists()
+
+
 def test_channels_are_independently_enabled_and_disabled(project: Path) -> None:
     SETUP.enable(project, STOP)
     SETUP.enable(project, SESSION_END)
@@ -137,6 +151,32 @@ def test_enable_replaces_a_legacy_registration(project: Path) -> None:
     assert entries[0]["args"] == ["--root", "${CLAUDE_PROJECT_DIR}", "--kind", "stop"]
 
 
+def test_similar_unrelated_handler_name_is_preserved(project: Path) -> None:
+    unrelated = {
+        "hooks": {
+            "Stop": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "./audit-remember-stop-capture.py",
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    (project / ".claude").mkdir()
+    (project / ".claude" / "settings.json").write_text(
+        json.dumps(unrelated), encoding="utf-8"
+    )
+
+    SETUP.enable(project, STOP)
+    SETUP.disable(project, STOP)
+
+    assert settings(project) == unrelated
+
+
 def test_unrelated_settings_and_hooks_are_preserved(project: Path) -> None:
     original = {
         "permissions": {"allow": ["Bash(git status)"]},
@@ -169,6 +209,18 @@ def test_invalid_settings_are_reported_and_never_overwritten(project: Path) -> N
     assert path.read_text(encoding="utf-8") == "{ broken"
 
 
+@pytest.mark.parametrize("content", ("", "[]", '{"hooks": []}'))
+def test_invalid_settings_shapes_are_preserved(project: Path, content: str) -> None:
+    path = project / ".claude" / "settings.json"
+    path.parent.mkdir()
+    path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(SETUP.SetupError):
+        SETUP.enable(project, STOP)
+
+    assert path.read_text(encoding="utf-8") == content
+
+
 def test_disable_is_safe_when_nothing_is_installed(project: Path) -> None:
     result = SETUP.disable(project, SESSION_END)
 
@@ -187,6 +239,20 @@ def test_status_reports_each_channel(project: Path) -> None:
     assert states["session-end-capture"]["handler_executable"] is True
     assert states["stop-capture"]["state"] == "disabled"
     assert states["stop-capture"]["registrations"] == 0
+
+
+def test_status_can_report_one_channel(project: Path, capsys) -> None:
+    SETUP.enable(project, SESSION_END)
+
+    payload = SETUP.status(project, SESSION_END)
+
+    assert [item["channel"] for item in payload["channels"]] == ["session-end-capture"]
+    assert (
+        SETUP.main(["status", "session-end-capture", "--root", str(project), "--json"])
+        == 0
+    )
+    rendered = json.loads(capsys.readouterr().out)
+    assert [item["channel"] for item in rendered["channels"]] == ["session-end-capture"]
 
 
 def test_status_flags_a_registered_but_non_executable_handler(project: Path) -> None:
@@ -208,3 +274,15 @@ def test_main_status_emits_json(project: Path, capsys) -> None:
     assert SETUP.main(["status", "--root", str(project), "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert [item["state"] for item in payload["channels"]] == ["disabled", "disabled"]
+
+
+def test_main_status_fails_when_settings_state_is_unknown(
+    project: Path, capsys
+) -> None:
+    path = project / ".claude" / "settings.json"
+    path.parent.mkdir()
+    path.write_text("{broken", encoding="utf-8")
+
+    assert SETUP.main(["status", "--root", str(project), "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert all("settings_error" in channel for channel in payload["channels"])

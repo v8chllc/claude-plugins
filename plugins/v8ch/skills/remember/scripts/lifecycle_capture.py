@@ -15,7 +15,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -24,6 +26,7 @@ STOP_KIND = "stop"
 SESSION_END_KIND = "session-end"
 SEGMENT_KINDS = (STOP_KIND, SESSION_END_KIND)
 HOOK_EVENTS = {STOP_KIND: "Stop", SESSION_END_KIND: "SessionEnd"}
+MAX_TRANSCRIPT_BYTES = 1024 * 1024
 
 
 def digest(*parts: str) -> str:
@@ -56,9 +59,17 @@ def transcript_message(payload: dict[str, object]) -> str | None:
     if not isinstance(location, str) or not location:
         return None
     try:
-        lines = Path(location).read_text(encoding="utf-8").splitlines()
+        with Path(location).open("rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            size = handle.tell()
+            start = max(0, size - MAX_TRANSCRIPT_BYTES)
+            handle.seek(start)
+            transcript_tail = handle.read().decode("utf-8", errors="ignore")
     except OSError:
         return None
+    lines = transcript_tail.splitlines()
+    if start and lines:
+        lines = lines[1:]
     for line in reversed(lines):
         try:
             entry = json.loads(line)
@@ -67,14 +78,14 @@ def transcript_message(payload: dict[str, object]) -> str | None:
         if not isinstance(entry, dict) or entry.get("type") != "assistant":
             continue
         message = entry.get("message")
-        content = message.get("content") if isinstance(message, dict) else None
-        if isinstance(content, str) and content.strip():
-            return content
-        if not isinstance(content, list):
+        message_content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(message_content, str) and message_content.strip():
+            return message_content
+        if not isinstance(message_content, list):
             continue
         texts = [
             block["text"]
-            for block in content
+            for block in message_content
             if isinstance(block, dict)
             and block.get("type") == "text"
             and isinstance(block.get("text"), str)
@@ -89,11 +100,25 @@ def write_segment(path: Path, record: dict[str, object]) -> None:
     """Write one immutable segment, leaving any existing file untouched."""
     path.parent.mkdir(parents=True, exist_ok=True)
     body = json.dumps(record, indent=2, sort_keys=True) + "\n"
+    handle = tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    )
+    temporary = Path(handle.name)
     try:
-        with path.open("x", encoding="utf-8") as handle:
+        with handle:
             handle.write(body)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, path)
     except (FileExistsError, OSError):
-        return
+        pass
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def capture_stop(root: Path, payload: dict[str, object]) -> None:
@@ -123,7 +148,9 @@ def capture_session_end(root: Path, payload: dict[str, object]) -> None:
     if not isinstance(session_id, str) or not session_id:
         return
     raw_reason = payload.get("reason")
-    reason = raw_reason if isinstance(raw_reason, str) and raw_reason else "other"
+    if not isinstance(raw_reason, str) or not raw_reason:
+        return
+    reason = raw_reason
     key = session_end_key(session_id, reason)
     record: dict[str, object] = {
         "version": SEGMENT_VERSION,
@@ -149,7 +176,12 @@ def capture(root: Path, payload: dict[str, object], kind: str) -> int:
     """Capture one segment for ``kind``; always report success."""
     if kind not in SEGMENT_KINDS:
         return 0
-    if payload.get("agent_id") or payload.get("agent_type"):
+    if (
+        not (root / ".remember" / "MEMORY.md").is_file()
+        or not (root / ".remember" / "memory").is_dir()
+    ):
+        return 0
+    if payload.get("agent_id"):
         return 0
     if payload.get("hook_event_name") != HOOK_EVENTS[kind]:
         return 0
@@ -158,49 +190,6 @@ def capture(root: Path, payload: dict[str, object], kind: str) -> int:
     else:
         capture_session_end(root, payload)
     return 0
-
-
-def read_segments(root: Path) -> list[tuple[Path, dict[str, object]]]:
-    """Return valid segments of any known kind belonging to this project."""
-    result: list[tuple[Path, dict[str, object]]] = []
-    for path in turns_dir(root).glob("*.json"):
-        try:
-            record = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if not isinstance(record, dict):
-            continue
-        if record.get("kind") not in SEGMENT_KINDS:
-            continue
-        if record.get("project_root") != str(root.resolve()):
-            continue
-        result.append((path, record))
-    return result
-
-
-def eligible_segments(root: Path) -> list[tuple[Path, dict[str, object]]]:
-    """Return unsummarized segments of both kinds in capture order."""
-    pending = [
-        (path, record)
-        for path, record in read_segments(root)
-        if not record.get("summarized_at")
-    ]
-    return sorted(pending, key=lambda item: str(item[1].get("captured_at", "")))
-
-
-def cleanup_candidates(root: Path) -> list[Path]:
-    """Return only older verified summarized files that are safe to remove."""
-    verified: list[tuple[Path, dict[str, object]]] = []
-    for path, record in read_segments(root):
-        summary = record.get("summary_path")
-        if (
-            record.get("summarized_at")
-            and isinstance(summary, str)
-            and (root / summary).is_file()
-        ):
-            verified.append((path, record))
-    verified.sort(key=lambda item: str(item[1].get("summarized_at", "")))
-    return [path for path, _ in verified[:-1]]
 
 
 def build_parser() -> argparse.ArgumentParser:

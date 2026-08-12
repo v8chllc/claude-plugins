@@ -176,6 +176,64 @@ kind: note
     assert "journal_kind_invalid" in codes
 
 
+def test_valid_stop_and_session_end_segments_pass(tmp_path: Path) -> None:
+    write_valid_memory(tmp_path)
+    turns = tmp_path / ".remember" / "turns"
+    turns.mkdir()
+    root = str(tmp_path.resolve())
+    records = {
+        "stop-stop-key.json": {
+            "version": 1,
+            "kind": "stop",
+            "idempotency_key": "stop-key",
+            "project_root": root,
+            "session_id": "session-1",
+            "captured_at": "2026-08-12T00:00:00+00:00",
+            "last_assistant_message": "Done.",
+        },
+        "session-end-end-key.json": {
+            "version": 1,
+            "kind": "session-end",
+            "idempotency_key": "end-key",
+            "project_root": root,
+            "session_id": "session-1",
+            "captured_at": "2026-08-12T00:01:00+00:00",
+            "reason": "other",
+        },
+    }
+    for name, record in records.items():
+        (turns / name).write_text(json.dumps(record), encoding="utf-8")
+
+    result = run_validate(tmp_path, "--json")
+
+    assert result.returncode == 0
+
+
+def test_invalid_lifecycle_segment_is_reported(tmp_path: Path) -> None:
+    write_valid_memory(tmp_path)
+    turns = tmp_path / ".remember" / "turns"
+    turns.mkdir()
+    (turns / "stop-wrong.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "kind": "stop",
+                "idempotency_key": "different-key",
+                "project_root": str(tmp_path.resolve()),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_validate(tmp_path, "--json")
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert any(
+        issue["code"] == "lifecycle_segment_invalid" for issue in payload["issues"]
+    )
+
+
 def test_steering_detection_and_application(tmp_path: Path) -> None:
     write_valid_memory(tmp_path)
     steering_path = tmp_path / STEERING_FILE

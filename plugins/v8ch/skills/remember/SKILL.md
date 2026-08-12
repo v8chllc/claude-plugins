@@ -19,7 +19,8 @@ See `references/procedural-targets.md` for the approved procedural target allowl
 Use `scripts/validate_memory.py` for deterministic memory validation, JSON
 reporting, and setup-aware Memory Fast-Track steering checks.
 Use `scripts/hook_setup.py` to enable, disable, and report the opt-in lifecycle
-capture channels, and `scripts/lifecycle_capture.py` as the handler it installs.
+capture channels, `scripts/lifecycle_capture.py` as the handler it installs,
+and `scripts/lifecycle_segments.py` for pending, marker, and cleanup operations.
 
 ---
 
@@ -204,40 +205,46 @@ Triggered by `/remember session` or natural language journal phrases.
 
 1. **Guard**: check `.remember/MEMORY.md` and `.remember/memory/` exist. If
    either is missing, tell the user to run `/remember setup` first and stop.
-2. Read every valid, project-matching, unsummarized `.remember/turns/*.json`
-   segment in chronological order, including segments created before `/clear`.
+2. Run
+   `python "${CLAUDE_SKILL_DIR}/scripts/lifecycle_segments.py" pending --root .`
+   and read every returned segment in order, including segments created before
+   `/clear`.
    Both `stop` and `session-end` segments are valid input; treat a `session-end`
    segment as terminal-session context for its `reason`, and skip any file whose
    `kind` is missing or unrecognized.
 3. Compose one complete journal summary from those segments and the available
    live context. If no eligible segments exist, use live context as before.
-4. Write the journal entry first. Only after it succeeds, update each included
-   segment with `summarized_at` and `summary_path`. On failure, write neither marker.
+4. Write the journal entry first. After it succeeds, run
+   `python "${CLAUDE_SKILL_DIR}/scripts/lifecycle_segments.py" mark-summarized --root . --summary-path .remember/memory/YYYY-MM-DD.md`.
+   Keep segment markers unchanged when the journal write fails.
 5. Confirm the journal path and segment count.
 
 ## Workflow E1: Lifecycle Hook Management
 
 <instructions>
-Run `scripts/hook_setup.py` for every enable, disable, and status request. Never
-hand-edit `.claude/settings.json` and never copy a handler yourself.
+Use `scripts/hook_setup.py` as the sole implementation for every enable,
+disable, and status request. Let the helper own `.claude/settings.json` edits
+and handler installation.
 
 - `/remember hook enable <channel>`:
-  `python plugins/v8ch/skills/remember/scripts/hook_setup.py enable <channel> --root .`
+  `python "${CLAUDE_SKILL_DIR}/scripts/hook_setup.py" enable <channel> --root .`
 - `/remember hook disable <channel>`:
-  `python plugins/v8ch/skills/remember/scripts/hook_setup.py disable <channel> --root .`
-- `/remember hook status`:
-  `python plugins/v8ch/skills/remember/scripts/hook_setup.py status --root .`
+  `python "${CLAUDE_SKILL_DIR}/scripts/hook_setup.py" disable <channel> --root .`
+- `/remember hook status <channel>`:
+  `python "${CLAUDE_SKILL_DIR}/scripts/hook_setup.py" status <channel> --root .`
+- `/remember hook status` for both channels:
+  `python "${CLAUDE_SKILL_DIR}/scripts/hook_setup.py" status --root .`
 
-Pass `<channel>` exactly as `stop-capture` or `session-end-capture`. When the
-user names no channel, ask which one; enable only the channel they name.
-Report the helper output. When the helper exits non-zero, relay its message and
-stop.
+Pass `<channel>` exactly as `stop-capture` or `session-end-capture`. For enable
+or disable without a channel, ask which channel to target before running the
+helper. Report successful helper output as the result. If the helper exits
+non-zero, report its repair instruction as the next action.
 </instructions>
 
 <context>
 Both channels are default-disabled, opt-in, and independent. The helper writes
-project scope only: `.claude/settings.json` and `.claude/hooks/`. It never
-touches `~/.claude`.
+only project-scoped `.claude/settings.json` and `.claude/hooks/`; user-level
+`~/.claude` state remains unchanged.
 
 | Channel | Event | Handler installed at | Captures |
 | --- | --- | --- | --- |
@@ -261,23 +268,21 @@ Segments are immutable JSON files at `.remember/turns/<kind>-<key>.json` with
 </context>
 
 <constraints>
-- Enable requires initialized memory; the helper stops when `.remember/MEMORY.md`
-  or `.remember/memory/` is missing.
-- Enabling or disabling one channel leaves the other channel and every unrelated
-  hook and setting intact.
-- Re-enabling refreshes the handler and its single registration; it never adds a
-  duplicate.
-- Invalid or non-object settings JSON stops the run with a repair instruction and
-  is never overwritten.
-- Handlers stay quiet, exit successfully on any failure, ignore subagent events,
-  write no partial data, and never invoke recommendations or edit curated or
-  procedural memory.
+- Start enablement only when `.remember/MEMORY.md` and `.remember/memory/`
+  confirm initialized memory.
+- Preserve the other capture channel and every unrelated hook and setting.
+- On re-enable, refresh the target handler and leave exactly one registration.
+- Preserve invalid or non-object settings JSON and return a repair instruction.
+- Keep handlers quiet and fail-open. Restrict capture to main-agent events with
+  complete payloads, publish only complete immutable segments, and leave
+  curated and procedural memory unchanged.
 </constraints>
 
 <output_contract>
 Report in this order:
 1. The command run and the channel it targeted.
-2. The resulting state of both channels, taken from the helper.
+2. The helper-reported state for the requested channel, or both states when the
+   user requested aggregate status.
 3. The next action when the helper reported an error; otherwise the reminder
    that capture starts with the next matching lifecycle event.
 </output_contract>
@@ -285,17 +290,17 @@ Report in this order:
 ## Workflow E2: Cleanup
 
 <instructions>
-`/remember clean` previews removable segments. `/remember clean --apply` deletes
-them. Read segments through `cleanup_candidates()` in
-`scripts/lifecycle_capture.py`; do not select files by name or timestamp
-yourself.
+For `/remember clean`, run
+`python "${CLAUDE_SKILL_DIR}/scripts/lifecycle_segments.py" clean --root .`.
+For `/remember clean --apply`, show the preview, obtain explicit approval, then
+run the same command with `--apply`.
 </instructions>
 
 <constraints>
-- Delete only segments that have both `summarized_at` and an existing
-  `summary_path`, of either valid kind.
-- Retain the newest verified summarized segment.
-- Never delete active, unsummarized, malformed, unknown-kind, wrong-project, or
+- Select only valid Stop or SessionEnd segments with `summarized_at` and an
+  existing `summary_path` for this project.
+- Retain every segment in the newest verified summary checkpoint.
+- Preserve active, unsummarized, malformed, unknown-kind, wrong-project, and
   unverifiable files.
 </constraints>
 
@@ -422,7 +427,8 @@ remember", or "validate memory".
 2. Validation checks `.remember/MEMORY.md` for required type sections, known
    entry markers, required fields, and duplicate active `context` entries.
 3. Validation checks `.remember/memory/YYYY-MM-DD.md` journal filenames and
-   `remember-journal` metadata blocks.
+   `remember-journal` metadata blocks, plus valid Stop and SessionEnd lifecycle
+   segments.
 4. Validation reports issues without mutating files by default. Only append
    generated Memory Fast-Track steering after explicit user approval with
    `--apply-fast-track`.
