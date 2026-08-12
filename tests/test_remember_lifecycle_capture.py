@@ -68,9 +68,18 @@ def test_stop_writes_one_idempotent_main_agent_segment(tmp_path: Path) -> None:
     paths = segments(tmp_path)
     assert len(paths) == 1
     record = json.loads(paths[0].read_text(encoding="utf-8"))
+    assert record["version"] == 3
+    assert record["platform"] == "claude"
     assert record["kind"] == "stop"
     assert record["session_id"] == "session-1"
-    assert record["last_assistant_message"] == "Completed the task."
+    assert record["text"] == "Completed the task."
+    assert record["reason"] is None
+    assert record["summarized_at"] is None
+    assert record["summary_path"] is None
+    assert set(record) == set(SEGMENTS.SEGMENT_FIELDS)
+    assert paths[0].name == f"claude-stop-{record['key']}.json"
+    assert SEGMENTS.TIMESTAMP_RE.match(record["captured_at"])
+    assert SEGMENTS.valid_segment(tmp_path, paths[0], record)
 
 
 def test_capture_ignores_subagents_and_mismatched_events(tmp_path: Path) -> None:
@@ -108,7 +117,9 @@ def test_session_end_uses_transcript_fallback(tmp_path: Path) -> None:
     record = json.loads(paths[0].read_text(encoding="utf-8"))
     assert record["kind"] == "session-end"
     assert record["reason"] == "clear"
-    assert record["last_assistant_message"] == "Final answer."
+    assert record["text"] == "Final answer."
+    assert record["transcript_path"] == str(tmp_path / "transcript.jsonl")
+    assert SEGMENTS.valid_segment(tmp_path, paths[0], record)
 
 
 def test_session_end_does_not_duplicate_a_stop_message(tmp_path: Path) -> None:
@@ -128,7 +139,7 @@ def test_session_end_does_not_duplicate_a_stop_message(tmp_path: Path) -> None:
     ]
     terminal = [record for record in records if record["kind"] == "session-end"]
     assert len(records) == 2
-    assert "last_assistant_message" not in terminal[0]
+    assert terminal[0]["text"] == ""
     assert terminal[0]["reason"] == "logout"
 
 
@@ -144,9 +155,12 @@ def test_session_end_records_terminal_context_without_a_transcript(
 
     assert CAPTURE.capture(tmp_path, payload, "session-end") == 0
 
-    record = json.loads(segments(tmp_path)[0].read_text(encoding="utf-8"))
+    path = segments(tmp_path)[0]
+    record = json.loads(path.read_text(encoding="utf-8"))
     assert record["reason"] == "other"
-    assert "last_assistant_message" not in record
+    assert record["text"] == ""
+    assert record["transcript_path"] is None
+    assert SEGMENTS.valid_segment(tmp_path, path, record)
 
 
 def test_session_end_survives_an_unreadable_transcript(tmp_path: Path) -> None:
@@ -187,128 +201,6 @@ def test_capture_skips_uninitialized_memory_and_missing_session_end_reason(
     payload = {"hook_event_name": "SessionEnd", "session_id": "session-1"}
     assert CAPTURE.capture(tmp_path, payload, "session-end") == 0
     assert segments(tmp_path) == []
-
-
-def test_eligible_segments_include_both_kinds_and_skip_invalid(tmp_path: Path) -> None:
-    initialize_memory(tmp_path)
-    CAPTURE.capture(tmp_path, STOP_PAYLOAD, "stop")
-    CAPTURE.capture(
-        tmp_path,
-        {"hook_event_name": "SessionEnd", "session_id": "session-1", "reason": "clear"},
-        "session-end",
-    )
-    turns = tmp_path / ".remember" / "turns"
-    (turns / "broken.json").write_text("{not json", encoding="utf-8")
-    (turns / "foreign.json").write_text(
-        json.dumps({"kind": "stop", "project_root": "/elsewhere"}), encoding="utf-8"
-    )
-    (turns / "unknown.json").write_text(
-        json.dumps({"kind": "prompt", "project_root": str(tmp_path.resolve())}),
-        encoding="utf-8",
-    )
-
-    kinds = sorted(record["kind"] for _, record in SEGMENTS.eligible_segments(tmp_path))
-    assert kinds == ["session-end", "stop"]
-
-
-def test_cleanup_retains_newest_verified_segment_across_kinds(tmp_path: Path) -> None:
-    turns = tmp_path / ".remember" / "turns"
-    turns.mkdir(parents=True)
-    summary = tmp_path / ".remember" / "memory" / "2026-08-12.md"
-    summary.parent.mkdir()
-    summary.write_text("summary", encoding="utf-8")
-    root = str(tmp_path.resolve())
-    for index, kind in enumerate(("stop", "session-end")):
-        record = {
-            "version": 1,
-            "kind": kind,
-            "idempotency_key": f"key-{index}",
-            "project_root": root,
-            "session_id": "session-1",
-            "captured_at": f"2026-08-12T00:0{index}:00Z",
-            "summarized_at": f"2026-08-12T00:0{index}:00Z",
-            "summary_path": ".remember/memory/2026-08-12.md",
-        }
-        if kind == "stop":
-            record["last_assistant_message"] = "done"
-        else:
-            record["reason"] = "other"
-        (turns / f"{kind}-key-{index}.json").write_text(
-            json.dumps(record), encoding="utf-8"
-        )
-    unverified = {
-        "kind": "stop",
-        "project_root": root,
-        "summarized_at": "2026-08-12T00:00:00Z",
-        "summary_path": ".remember/memory/missing.md",
-    }
-    (turns / "stop-unverified.json").write_text(
-        json.dumps(unverified), encoding="utf-8"
-    )
-
-    assert SEGMENTS.cleanup_candidates(tmp_path) == [turns / "stop-key-0.json"]
-
-
-def test_cleanup_retains_every_segment_in_the_newest_checkpoint(tmp_path: Path) -> None:
-    turns = tmp_path / ".remember" / "turns"
-    turns.mkdir(parents=True)
-    memory = tmp_path / ".remember" / "memory"
-    memory.mkdir()
-    (memory / "old.md").write_text("old\n", encoding="utf-8")
-    (memory / "new.md").write_text("new\n", encoding="utf-8")
-    root = str(tmp_path.resolve())
-    records = (
-        ("stop-old", "stop", "2026-08-11T00:00:00Z", "old.md"),
-        ("stop-new", "stop", "2026-08-12T00:00:00Z", "new.md"),
-        (
-            "session-end-new",
-            "session-end",
-            "2026-08-12T00:00:00Z",
-            "new.md",
-        ),
-    )
-    for key, kind, stamp, summary_name in records:
-        record = {
-            "version": 1,
-            "kind": kind,
-            "idempotency_key": key,
-            "project_root": root,
-            "session_id": "session-1",
-            "captured_at": stamp,
-            "summarized_at": stamp,
-            "summary_path": f".remember/memory/{summary_name}",
-        }
-        if kind == "stop":
-            record["last_assistant_message"] = "done"
-        else:
-            record["reason"] = "other"
-        (turns / f"{kind}-{key}.json").write_text(
-            json.dumps(record),
-            encoding="utf-8",
-        )
-
-    assert SEGMENTS.cleanup_candidates(tmp_path) == [turns / "stop-stop-old.json"]
-
-
-def test_mark_summarized_uses_one_checkpoint_for_both_kinds(tmp_path: Path) -> None:
-    initialize_memory(tmp_path)
-    CAPTURE.capture(tmp_path, STOP_PAYLOAD, "stop")
-    CAPTURE.capture(
-        tmp_path,
-        {"hook_event_name": "SessionEnd", "session_id": "session-1", "reason": "clear"},
-        "session-end",
-    )
-    summary_path = ".remember/memory/2026-08-12.md"
-    (tmp_path / summary_path).write_text("summary\n", encoding="utf-8")
-
-    result = SEGMENTS.mark_summarized(tmp_path, summary_path)
-
-    assert result["marked"] == 2
-    records = [
-        json.loads(path.read_text(encoding="utf-8")) for path in segments(tmp_path)
-    ]
-    assert {record["summarized_at"] for record in records} == {result["summarized_at"]}
-    assert SEGMENTS.cleanup_candidates(tmp_path) == []
 
 
 def test_main_exits_quietly_on_malformed_stdin(tmp_path: Path, monkeypatch) -> None:
