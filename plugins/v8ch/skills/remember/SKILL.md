@@ -50,6 +50,15 @@ reporting, and setup-aware Memory Fast-Track steering checks.
 - `/remember workflow <text>`
 - `/remember standard <text>`
 
+**Stop capture (opt-in):**
+- `/remember hook enable stop-capture`
+- `/remember hook disable stop-capture`
+- `/remember hook status`
+
+**Segment cleanup:**
+- `/remember clean`
+- `/remember clean --apply`
+
 **Record — slash command:**
 - `/remember entity <identifier>`
 - `/remember decision <text>`
@@ -73,17 +82,19 @@ reporting, and setup-aware Memory Fast-Track steering checks.
 
 Triggered by `/remember` with no args.
 
-1. Check whether `.remember/MEMORY.md` and `.remember/memory/` exist in cwd.
-   - If either is missing: report that memory is not initialized and tell the
-     user to run `/remember setup`. Do not create files.
-2. Read `.remember/MEMORY.md`.
-3. Find dated journal files matching `.remember/memory/YYYY-MM-DD.md` and
+1. Read `README.md` and `CLAUDE.md` when present, then run `ls -1` and
+   `git ls-files` as separate commands. Return a concise project brief before
+   memory status; do this even if memory is uninitialized.
+2. Check whether `.remember/MEMORY.md` and `.remember/memory/` exist in cwd.
+   If either is missing, report that `/remember setup` is needed. Do not create files.
+3. Read `.remember/MEMORY.md` when present.
+4. Find dated journal files matching `.remember/memory/YYYY-MM-DD.md` and
    select the most recent one by date. Ignore non-dated files. This selection
    is not limited to today or yesterday; load the newest dated journal even if
    it is weeks or months old.
-4. If a dated journal exists, read it. Otherwise, explicitly report that no
+5. If a dated journal exists, read it. Otherwise, explicitly report that no
    dated daily journal exists.
-5. Respond with a concise status report:
+6. Respond with a concise status report:
    - durable memory loaded from `.remember/MEMORY.md`
    - most recent dated journal loaded, including its path, or no dated daily
      journal exists
@@ -189,11 +200,41 @@ Triggered by `/remember session` or natural language journal phrases.
 
 1. **Guard**: check `.remember/MEMORY.md` and `.remember/memory/` exist. If
    either is missing, tell the user to run `/remember setup` first and stop.
-2. Compute a best-effort `session_hash` from available context. See `references/journal-format.md` for the approach.
-3. Read today's journal file (`.remember/memory/YYYY-MM-DD.md`) if it exists; scan for an existing marker with the same hash.
-4. If hash found → skip (dedupe). Notify user that this session was already captured.
-5. If hash not found → compose a journal entry covering: what happened, key context, decisions considered, blockers, next steps, and useful references. Append entry with HTML comment metadata marker. See `references/journal-format.md` for the format.
-6. Confirm to user: file path written, or skipped with reason.
+2. Read every valid, project-matching, unsummarized `.remember/turns/*.json`
+   segment in chronological order, including segments created before `/clear`.
+3. Compose one complete journal summary from those segments and the available
+   live context. If no eligible segments exist, use live context as before.
+4. Write the journal entry first. Only after it succeeds, update each included
+   segment with `summarized_at` and `summary_path`. On failure, write neither marker.
+5. Confirm the journal path and segment count.
+
+## Workflow E1: Stop Hook Management
+
+`/remember hook enable stop-capture` is the only way to enable capture. Copy
+`scripts/stop_capture.py` to `.claude/hooks/remember-stop-capture.py`, then add
+this handler to the project-level `.claude/settings.json`, preserving all other
+settings and hooks:
+
+```json
+{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/remember-stop-capture.py","timeout":5}]}]}}
+```
+
+The handler is quiet and default-disabled. Claude Code runs `Stop` only for a
+completed main-agent response; it does not run for interrupts or API failures.
+The handler ignores subagents, writes only immutable `.remember/turns/<key>.json`
+segments, and derives `<key>` from `session_id` plus `last_assistant_message`.
+It must never invoke recommendations or edit curated/procedural memory.
+
+`/remember hook disable stop-capture` removes only this handler and its copied
+script. `/remember hook status` reports `enabled` or `disabled` from the
+project `.claude/settings.json`.
+
+## Workflow E2: Cleanup
+
+`/remember clean` previews removable segments. `/remember clean --apply` may
+delete only older verified segments with both `summarized_at` and an existing
+`summary_path`, retaining the newest valid summarized segment. Never delete
+active, unsummarized, malformed, wrong-project, or unverifiable files.
 
 ---
 

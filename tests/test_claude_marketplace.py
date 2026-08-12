@@ -121,3 +121,14 @@ def test_remember_manual_load_selects_the_latest_dated_journal() -> None:
     assert "Ignore non-dated files." in skill_text
     assert "not limited to today or yesterday" in skill_text
     assert "no dated daily journal exists" in " ".join(skill_text.split())
+
+
+def test_remember_documents_opt_in_stop_capture() -> None:
+    skill_dir = REPO_ROOT / "plugins" / "v8ch" / "skills" / "remember"
+    skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "/remember hook enable stop-capture" in skill_text
+    assert ".claude/settings.json" in skill_text
+    assert "session_id" in skill_text
+    assert "last_assistant_message" in skill_text
+    assert "default-disabled" in skill_text
