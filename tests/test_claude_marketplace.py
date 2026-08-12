@@ -111,3 +111,13 @@ def test_remember_skill_uses_manual_load_and_explicit_setup() -> None:
     assert "do not inject a memory-load directive" in skill_text
     assert "exactly matches the reference content" in skill_text
     assert "Inject `references/claude-md-directive.md`" not in skill_text
+
+
+def test_remember_manual_load_selects_the_latest_dated_journal() -> None:
+    skill_dir = REPO_ROOT / "plugins" / "v8ch" / "skills" / "remember"
+    skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "select the most recent one by date" in skill_text
+    assert "Ignore non-dated files." in skill_text
+    assert "not limited to today or yesterday" in skill_text
+    assert "no dated daily journal exists" in " ".join(skill_text.split())

@@ -77,13 +77,16 @@ Triggered by `/remember` with no args.
    - If either is missing: report that memory is not initialized and tell the
      user to run `/remember setup`. Do not create files.
 2. Read `.remember/MEMORY.md`.
-3. Compute today's journal path, `.remember/memory/YYYY-MM-DD.md`, using the
-   current local date.
-4. If today's journal file exists, read it. If not, report that no journal file
-   exists for today.
+3. Find dated journal files matching `.remember/memory/YYYY-MM-DD.md` and
+   select the most recent one by date. Ignore non-dated files. This selection
+   is not limited to today or yesterday; load the newest dated journal even if
+   it is weeks or months old.
+4. If a dated journal exists, read it. Otherwise, explicitly report that no
+   dated daily journal exists.
 5. Respond with a concise status report:
    - durable memory loaded from `.remember/MEMORY.md`
-   - today's journal loaded or absent
+   - most recent dated journal loaded, including its path, or no dated daily
+     journal exists
    - optional procedural targets present or missing:
      `CODING_STANDARDS.md`, `ARCHITECTURE_STANDARDS.md`,
      `WORKFLOW_STANDARDS.md`
