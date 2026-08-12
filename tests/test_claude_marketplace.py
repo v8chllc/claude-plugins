@@ -123,12 +123,24 @@ def test_remember_manual_load_selects_the_latest_dated_journal() -> None:
     assert "no dated daily journal exists" in " ".join(skill_text.split())
 
 
-def test_remember_documents_opt_in_stop_capture() -> None:
+def test_remember_documents_opt_in_lifecycle_capture() -> None:
     skill_dir = REPO_ROOT / "plugins" / "v8ch" / "skills" / "remember"
     skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
 
     assert "/remember hook enable stop-capture" in skill_text
+    assert "/remember hook enable session-end-capture" in skill_text
     assert ".claude/settings.json" in skill_text
     assert "session_id" in skill_text
     assert "last_assistant_message" in skill_text
     assert "default-disabled" in skill_text
+    assert "scripts/hook_setup.py" in skill_text
+
+
+def test_remember_lifecycle_workflow_uses_xml_prompt_sections() -> None:
+    skill_dir = REPO_ROOT / "plugins" / "v8ch" / "skills" / "remember"
+    skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    workflow = skill_text.split("## Workflow E1:")[1].split("## Workflow F:")[0]
+
+    for section in ("instructions", "context", "constraints", "output_contract"):
+        assert f"<{section}>" in workflow
+        assert f"</{section}>" in workflow

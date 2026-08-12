@@ -18,6 +18,8 @@ See `references/journal-format.md` for journal entry format and dedupe marker sp
 See `references/procedural-targets.md` for the approved procedural target allowlist.
 Use `scripts/validate_memory.py` for deterministic memory validation, JSON
 reporting, and setup-aware Memory Fast-Track steering checks.
+Use `scripts/hook_setup.py` to enable, disable, and report the opt-in lifecycle
+capture channels, and `scripts/lifecycle_capture.py` as the handler it installs.
 
 ---
 
@@ -50,9 +52,11 @@ reporting, and setup-aware Memory Fast-Track steering checks.
 - `/remember workflow <text>`
 - `/remember standard <text>`
 
-**Stop capture (opt-in):**
+**Lifecycle capture (opt-in, one channel at a time):**
 - `/remember hook enable stop-capture`
 - `/remember hook disable stop-capture`
+- `/remember hook enable session-end-capture`
+- `/remember hook disable session-end-capture`
 - `/remember hook status`
 
 **Segment cleanup:**
@@ -202,39 +206,102 @@ Triggered by `/remember session` or natural language journal phrases.
    either is missing, tell the user to run `/remember setup` first and stop.
 2. Read every valid, project-matching, unsummarized `.remember/turns/*.json`
    segment in chronological order, including segments created before `/clear`.
+   Both `stop` and `session-end` segments are valid input; treat a `session-end`
+   segment as terminal-session context for its `reason`, and skip any file whose
+   `kind` is missing or unrecognized.
 3. Compose one complete journal summary from those segments and the available
    live context. If no eligible segments exist, use live context as before.
 4. Write the journal entry first. Only after it succeeds, update each included
    segment with `summarized_at` and `summary_path`. On failure, write neither marker.
 5. Confirm the journal path and segment count.
 
-## Workflow E1: Stop Hook Management
+## Workflow E1: Lifecycle Hook Management
 
-`/remember hook enable stop-capture` is the only way to enable capture. Copy
-`scripts/stop_capture.py` to `.claude/hooks/remember-stop-capture.py`, then add
-this handler to the project-level `.claude/settings.json`, preserving all other
-settings and hooks:
+<instructions>
+Run `scripts/hook_setup.py` for every enable, disable, and status request. Never
+hand-edit `.claude/settings.json` and never copy a handler yourself.
+
+- `/remember hook enable <channel>`:
+  `python plugins/v8ch/skills/remember/scripts/hook_setup.py enable <channel> --root .`
+- `/remember hook disable <channel>`:
+  `python plugins/v8ch/skills/remember/scripts/hook_setup.py disable <channel> --root .`
+- `/remember hook status`:
+  `python plugins/v8ch/skills/remember/scripts/hook_setup.py status --root .`
+
+Pass `<channel>` exactly as `stop-capture` or `session-end-capture`. When the
+user names no channel, ask which one; enable only the channel they name.
+Report the helper output. When the helper exits non-zero, relay its message and
+stop.
+</instructions>
+
+<context>
+Both channels are default-disabled, opt-in, and independent. The helper writes
+project scope only: `.claude/settings.json` and `.claude/hooks/`. It never
+touches `~/.claude`.
+
+| Channel | Event | Handler installed at | Captures |
+| --- | --- | --- | --- |
+| `stop-capture` | `Stop` | `.claude/hooks/remember-stop-capture.py` | The completed main-agent response from `session_id` plus `last_assistant_message` |
+| `session-end-capture` | `SessionEnd` | `.claude/hooks/remember-session-end-capture.py` | Terminal-session context: `session_id` plus the end `reason` |
+
+Both handlers are copies of `scripts/lifecycle_capture.py`, installed with mode
+`0755` and registered in exec form:
 
 ```json
-{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/remember-stop-capture.py","timeout":5}]}]}}
+{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/remember-stop-capture.py","args":["--root","${CLAUDE_PROJECT_DIR}","--kind","stop"],"timeout":5}]}]}}
 ```
 
-The handler is quiet and default-disabled. Claude Code runs `Stop` only for a
-completed main-agent response; it does not run for interrupts or API failures.
-The handler ignores subagents, writes only immutable `.remember/turns/<key>.json`
-segments, and derives `<key>` from `session_id` plus `last_assistant_message`.
-It must never invoke recommendations or edit curated/procedural memory.
+`SessionEnd` payloads carry no `last_assistant_message`, so that handler falls
+back to the final assistant text in `transcript_path`. It omits the message when
+a Stop segment already holds that exact text, so the two channels never store
+the same response twice.
 
-`/remember hook disable stop-capture` removes only this handler and its copied
-script. `/remember hook status` reports `enabled` or `disabled` from the
-project `.claude/settings.json`.
+Segments are immutable JSON files at `.remember/turns/<kind>-<key>.json` with
+`kind` set to `stop` or `session-end`.
+</context>
+
+<constraints>
+- Enable requires initialized memory; the helper stops when `.remember/MEMORY.md`
+  or `.remember/memory/` is missing.
+- Enabling or disabling one channel leaves the other channel and every unrelated
+  hook and setting intact.
+- Re-enabling refreshes the handler and its single registration; it never adds a
+  duplicate.
+- Invalid or non-object settings JSON stops the run with a repair instruction and
+  is never overwritten.
+- Handlers stay quiet, exit successfully on any failure, ignore subagent events,
+  write no partial data, and never invoke recommendations or edit curated or
+  procedural memory.
+</constraints>
+
+<output_contract>
+Report in this order:
+1. The command run and the channel it targeted.
+2. The resulting state of both channels, taken from the helper.
+3. The next action when the helper reported an error; otherwise the reminder
+   that capture starts with the next matching lifecycle event.
+</output_contract>
 
 ## Workflow E2: Cleanup
 
-`/remember clean` previews removable segments. `/remember clean --apply` may
-delete only older verified segments with both `summarized_at` and an existing
-`summary_path`, retaining the newest valid summarized segment. Never delete
-active, unsummarized, malformed, wrong-project, or unverifiable files.
+<instructions>
+`/remember clean` previews removable segments. `/remember clean --apply` deletes
+them. Read segments through `cleanup_candidates()` in
+`scripts/lifecycle_capture.py`; do not select files by name or timestamp
+yourself.
+</instructions>
+
+<constraints>
+- Delete only segments that have both `summarized_at` and an existing
+  `summary_path`, of either valid kind.
+- Retain the newest verified summarized segment.
+- Never delete active, unsummarized, malformed, unknown-kind, wrong-project, or
+  unverifiable files.
+</constraints>
+
+<output_contract>
+List each candidate path with its kind, then the count deleted or previewed.
+</output_contract>
 
 ---
 
