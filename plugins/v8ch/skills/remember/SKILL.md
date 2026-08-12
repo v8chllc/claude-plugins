@@ -208,16 +208,22 @@ Triggered by `/remember session` or natural language journal phrases.
 2. Run
    `python "${CLAUDE_SKILL_DIR}/scripts/lifecycle_segments.py" pending --root .`
    and read every returned segment in order, including segments created before
-   `/clear`.
+   `/clear`. The store is shared: segments written by any supported platform are
+   returned, each carrying its own `platform`, ordered ascending by
+   `captured_at`.
    Both `stop` and `session-end` segments are valid input; treat a `session-end`
-   segment as terminal-session context for its `reason`, and skip any file whose
-   `kind` is missing or unrecognized.
+   segment as terminal-session context for its `reason`. The helper already
+   skips malformed files, so summarize exactly what it returns.
 3. Compose one complete journal summary from those segments and the available
    live context. If no eligible segments exist, use live context as before.
+   Write **one** entry covering every segment summarized in this run, with a
+   single `session_hash` over all source keys regardless of platform. Never one
+   entry per platform.
 4. Write the journal entry first. After it succeeds, run
    `python "${CLAUDE_SKILL_DIR}/scripts/lifecycle_segments.py" mark-summarized --root . --summary-path .remember/memory/YYYY-MM-DD.md`.
    Keep segment markers unchanged when the journal write fails.
-5. Confirm the journal path and segment count.
+5. Confirm the journal path and the segment count, including the per-platform
+   counts reported by the helper.
 
 ## Workflow E1: Lifecycle Hook Management
 
@@ -259,12 +265,18 @@ Both handlers are copies of `scripts/lifecycle_capture.py`, installed with mode
 ```
 
 `SessionEnd` payloads carry no `last_assistant_message`, so that handler falls
-back to the final assistant text in `transcript_path`. It omits the message when
-a Stop segment already holds that exact text, so the two channels never store
-the same response twice.
+back to the final assistant text in `transcript_path`. It records `text: ""`
+when a Stop segment already holds that exact text, so the two channels never
+store the same response twice.
 
-Segments are immutable JSON files at `.remember/turns/<kind>-<key>.json` with
-`kind` set to `stop` or `session-end`.
+Segments are immutable `version: 3` JSON files in one flat store shared with
+other toolchains: `.remember/turns/<platform>-<kind>-<key>.json`, with
+`platform` set to `claude` by this handler and `kind` set to `stop` or
+`session-end`. See `references/journal-format.md` for the full field list.
+
+Installed handlers are copies of `scripts/lifecycle_capture.py`. After upgrading
+the plugin, re-run `enable` for each channel so the installed copies are
+refreshed to the current format.
 </context>
 
 <constraints>
@@ -297,11 +309,12 @@ run the same command with `--apply`.
 </instructions>
 
 <constraints>
-- Select only valid Stop or SessionEnd segments with `summarized_at` and an
-  existing `summary_path` for this project.
+- Select only valid v3 Stop or SessionEnd segments with `summarized_at` and an
+  existing `summary_path` for this project. Retention rules apply uniformly
+  across every `platform`.
 - Retain every segment in the newest verified summary checkpoint.
-- Preserve active, unsummarized, malformed, unknown-kind, wrong-project, and
-  unverifiable files.
+- Preserve active, unsummarized, malformed, legacy-format, unknown-kind,
+  wrong-project, and unverifiable files.
 </constraints>
 
 <output_contract>
@@ -427,8 +440,8 @@ remember", or "validate memory".
 2. Validation checks `.remember/MEMORY.md` for required type sections, known
    entry markers, required fields, and duplicate active `context` entries.
 3. Validation checks `.remember/memory/YYYY-MM-DD.md` journal filenames and
-   `remember-journal` metadata blocks, plus valid Stop and SessionEnd lifecycle
-   segments.
+   `remember-journal` metadata blocks, plus valid `version: 3` Stop and
+   SessionEnd lifecycle segments from every platform.
 4. Validation reports issues without mutating files by default. Only append
    generated Memory Fast-Track steering after explicit user approval with
    `--apply-fast-track`.
