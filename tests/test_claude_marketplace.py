@@ -8,7 +8,8 @@ ALLOWED_AGENT_COLORS = {"blue", "cyan", "green", "yellow", "magenta", "red"}
 
 
 def load_json(path: Path) -> dict[str, object]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    data: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
+    return data
 
 
 def parse_frontmatter(path: Path) -> dict[str, Any]:
