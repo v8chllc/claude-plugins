@@ -93,7 +93,10 @@ def load_settings(path: Path) -> dict[str, Any]:
     except OSError as error:
         raise SetupError(f"Cannot read {path}: {error}") from error
     if not text.strip():
-        return {}
+        raise SetupError(
+            f"{path} is empty and therefore not valid JSON. Repair it by hand; "
+            "Remember will not overwrite it."
+        )
     try:
         data = json.loads(text)
     except json.JSONDecodeError as error:
@@ -104,6 +107,11 @@ def load_settings(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise SetupError(
             f"{path} must contain a JSON object. Repair it by hand; "
+            "Remember will not overwrite it."
+        )
+    if "hooks" in data and not isinstance(data["hooks"], dict):
+        raise SetupError(
+            f"{path} has a non-object hooks value. Repair it by hand; "
             "Remember will not overwrite it."
         )
     return data
@@ -136,8 +144,13 @@ def owns_entry(entry: Any, channel: Channel) -> bool:
     """Match Remember-owned entries, including legacy shell-form registrations."""
     if not isinstance(entry, dict):
         return False
-    command = entry.get("command")
-    return isinstance(command, str) and channel.handler in command
+    if entry.get("type") != "command":
+        return False
+    expected = channel.registration()
+    if entry.get("command") != expected["command"]:
+        return False
+    args = entry.get("args")
+    return args is None or args == expected["args"]
 
 
 def strip_channel(settings: dict[str, Any], channel: Channel) -> bool:
@@ -176,10 +189,23 @@ def strip_channel(settings: dict[str, Any], channel: Channel) -> bool:
 def install_handler(root: Path, channel: Channel) -> Path:
     destination = root / channel.handler_path
     destination.parent.mkdir(parents=True, exist_ok=True)
+    handle = tempfile.NamedTemporaryFile(
+        "wb",
+        dir=destination.parent,
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        delete=False,
+    )
+    temporary = Path(handle.name)
     try:
-        shutil.copyfile(HANDLER_SOURCE, destination)
-        destination.chmod(HANDLER_MODE)
+        with HANDLER_SOURCE.open("rb") as source, handle:
+            shutil.copyfileobj(source, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.chmod(HANDLER_MODE)
+        os.replace(temporary, destination)
     except OSError as error:
+        temporary.unlink(missing_ok=True)
         raise SetupError(f"Cannot install {destination}: {error}") from error
     return destination
 
@@ -203,8 +229,8 @@ def enable(root: Path, channel: Channel) -> dict[str, Any]:
             "Repair it by hand; Remember will not overwrite it."
         )
     groups.append({"hooks": [channel.registration()]})
-    write_settings(settings_path, settings)
     handler = install_handler(root, channel)
+    write_settings(settings_path, settings)
     return {
         "channel": channel.name,
         "action": "refreshed" if refreshed else "enabled",
@@ -262,11 +288,12 @@ def channel_status(root: Path, channel: Channel) -> dict[str, Any]:
     return state
 
 
-def status(root: Path) -> dict[str, Any]:
+def status(root: Path, channel: Channel | None = None) -> dict[str, Any]:
+    channels = (channel,) if channel else tuple(CHANNELS.values())
     return {
         "root": str(root),
         "memory_initialized": (root / ".remember" / "MEMORY.md").is_file(),
-        "channels": [channel_status(root, channel) for channel in CHANNELS.values()],
+        "channels": [channel_status(root, item) for item in channels],
     }
 
 
@@ -312,7 +339,7 @@ def main(argv: list[str] | None = None) -> int:
     root = args.root.resolve()
     try:
         if args.command == "status":
-            payload = status(root)
+            payload = status(root, CHANNELS[args.channel] if args.channel else None)
             renderer = render_status
         else:
             if not args.channel:
@@ -335,6 +362,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.json
         else renderer(payload)
     )
+    if args.command == "status" and any(
+        "settings_error" in channel for channel in payload["channels"]
+    ):
+        return 1
     return 0
 
 

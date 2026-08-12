@@ -46,7 +46,7 @@ def test_marketplace_points_to_valid_plugin_manifest() -> None:
 
     manifest = load_json(plugin_root / ".claude-plugin" / "plugin.json")
     assert manifest["name"] == entry["name"]
-    assert manifest["version"] == "1.0.1"
+    assert manifest["version"] == "1.0.2"
     assert manifest["description"]
 
 
@@ -134,6 +134,8 @@ def test_remember_documents_opt_in_lifecycle_capture() -> None:
     assert "last_assistant_message" in skill_text
     assert "default-disabled" in skill_text
     assert "scripts/hook_setup.py" in skill_text
+    assert "scripts/lifecycle_segments.py" in skill_text
+    assert "${CLAUDE_SKILL_DIR}" in skill_text
 
 
 def test_remember_lifecycle_workflow_uses_xml_prompt_sections() -> None:

@@ -109,3 +109,25 @@ Before appending:
 - Do not use semantic similarity for dedupe.
 - Do not introduce an external state store or database.
 - Keep metadata in HTML comments so the journal remains readable as plain Markdown.
+
+---
+
+## Lifecycle segments
+
+Enabled Claude `Stop` and `SessionEnd` hooks write version-1 JSON records under:
+
+```text
+.remember/turns/<kind>-<idempotency-key>.json
+```
+
+Every record contains `version`, `kind`, `idempotency_key`, `project_root`,
+`session_id`, and `captured_at`. Stop records also contain
+`last_assistant_message`; SessionEnd records contain `reason` and may contain a
+transcript-derived `last_assistant_message` when Stop has not already captured
+the same response.
+
+After journal synthesis succeeds, run `lifecycle_segments.py mark-summarized`
+once so every included record receives the same `summarized_at` and
+`summary_path` checkpoint. Cleanup previews older verified checkpoints, retains
+the complete newest checkpoint, and applies deletion only after explicit
+approval.

@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from lifecycle_segments import valid_segment
+
 MEMORY_TYPES = ("entity", "decision", "context", "error", "preference", "todo")
 REQUIRED_FIELDS = {
     "entity": ("Entity", "Type", "Location", "Purpose", "Dependencies"),
@@ -217,6 +219,26 @@ def validate_journals(root: Path, issues: list[Issue]) -> None:
                     "remember-journal kind must be session.",
                     "Set kind: session in the metadata block.",
                 )
+
+
+def validate_lifecycle_segments(root: Path, issues: list[Issue]) -> None:
+    turns = root / ".remember" / "turns"
+    if not turns.is_dir():
+        return
+    for path in sorted(turns.glob("*.json")):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            record = None
+        if not valid_segment(root, path, record):
+            add_issue(
+                issues,
+                "error",
+                "lifecycle_segment_invalid",
+                path,
+                "Lifecycle segment metadata or filename is invalid for this project.",
+                "Retain the file for manual review; do not synthesize or clean it.",
+            )
 
 
 def detect_branch(root: Path) -> str:
@@ -432,6 +454,7 @@ def main(argv: list[str] | None = None) -> int:
     issues: list[Issue] = []
     validate_memory_file(root, issues)
     validate_journals(root, issues)
+    validate_lifecycle_segments(root, issues)
     fast_track_added = False
     if args.check_steering or args.apply_fast_track:
         steering_file = args.steering_file or (
