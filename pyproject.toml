@@ -1,6 +1,6 @@
 [tool.black]
 line-length = 88
-target-version = ["py311"]
+target-version = ["py312"]
 extend-exclude = '''
 /(
   \.git
@@ -12,7 +12,7 @@ extend-exclude = '''
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py312"
 extend-exclude = [
   "__pycache__",
   "node_modules",
@@ -34,7 +34,7 @@ indent-style = "space"
 line-ending = "auto"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 files = [
   "plugins",
   "tests",
