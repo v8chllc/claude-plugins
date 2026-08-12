@@ -6,6 +6,12 @@ channel and registers it with ``--kind stop`` or ``--kind session-end``.  The
 handler reads a hook payload on stdin, writes at most one immutable segment
 under ``.remember/turns/``, and never writes curated or procedural memory.
 
+Segments use the shared ``version: 3`` format defined by
+``lifecycle_segments.py``: one flat store, ``platform`` as a record field, and
+filenames of the form ``{platform}-{kind}-{key}.json``.  The schema is repeated
+here rather than imported because installed handlers are standalone copies of
+this file.
+
 The handler is quiet: it prints nothing and always exits successfully so a
 capture failure can never interrupt a Claude Code session.
 """
@@ -21,12 +27,19 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-SEGMENT_VERSION = 1
+SEGMENT_VERSION = 3
+PLATFORM = "claude"
 STOP_KIND = "stop"
 SESSION_END_KIND = "session-end"
 SEGMENT_KINDS = (STOP_KIND, SESSION_END_KIND)
 HOOK_EVENTS = {STOP_KIND: "Stop", SESSION_END_KIND: "SessionEnd"}
 MAX_TRANSCRIPT_BYTES = 1024 * 1024
+TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
+
+
+def now_stamp() -> str:
+    """Return the fixed-width UTC stamp the shared segment format requires."""
+    return datetime.now(UTC).strftime(TIMESTAMP_FORMAT)
 
 
 def digest(*parts: str) -> str:
@@ -46,7 +59,7 @@ def turns_dir(root: Path) -> Path:
 
 
 def segment_path(root: Path, kind: str, key: str) -> Path:
-    return turns_dir(root) / f"{kind}-{key}.json"
+    return turns_dir(root) / f"{PLATFORM}-{kind}-{key}.json"
 
 
 def transcript_message(payload: dict[str, object]) -> str | None:
@@ -121,6 +134,38 @@ def write_segment(path: Path, record: dict[str, object]) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def transcript_location(payload: dict[str, object]) -> str | None:
+    """Return the payload's transcript path, carried through but never followed."""
+    location = payload.get("transcript_path")
+    return location if isinstance(location, str) and location else None
+
+
+def build_record(
+    root: Path,
+    kind: str,
+    key: str,
+    session_id: str,
+    text: str,
+    reason: str | None,
+    transcript_path: str | None,
+) -> dict[str, object]:
+    """Return one complete v3 segment: all twelve keys, nullables explicit."""
+    return {
+        "version": SEGMENT_VERSION,
+        "platform": PLATFORM,
+        "kind": kind,
+        "key": key,
+        "project_root": str(root.resolve()),
+        "session_id": session_id,
+        "captured_at": now_stamp(),
+        "text": text,
+        "reason": reason,
+        "transcript_path": transcript_path,
+        "summarized_at": None,
+        "summary_path": None,
+    }
+
+
 def capture_stop(root: Path, payload: dict[str, object]) -> None:
     session_id = payload.get("session_id")
     message = payload.get("last_assistant_message")
@@ -131,15 +176,15 @@ def capture_stop(root: Path, payload: dict[str, object]) -> None:
     key = stop_key(session_id, message)
     write_segment(
         segment_path(root, STOP_KIND, key),
-        {
-            "version": SEGMENT_VERSION,
-            "kind": STOP_KIND,
-            "idempotency_key": key,
-            "project_root": str(root.resolve()),
-            "session_id": session_id,
-            "captured_at": datetime.now(UTC).isoformat(),
-            "last_assistant_message": message,
-        },
+        build_record(
+            root,
+            STOP_KIND,
+            key,
+            session_id,
+            text=message,
+            reason=None,
+            transcript_path=transcript_location(payload),
+        ),
     )
 
 
@@ -147,29 +192,31 @@ def capture_session_end(root: Path, payload: dict[str, object]) -> None:
     session_id = payload.get("session_id")
     if not isinstance(session_id, str) or not session_id:
         return
-    raw_reason = payload.get("reason")
-    if not isinstance(raw_reason, str) or not raw_reason:
+    reason = payload.get("reason")
+    if not isinstance(reason, str) or not reason:
         return
-    reason = raw_reason
     key = session_end_key(session_id, reason)
-    record: dict[str, object] = {
-        "version": SEGMENT_VERSION,
-        "kind": SESSION_END_KIND,
-        "idempotency_key": key,
-        "project_root": str(root.resolve()),
-        "session_id": session_id,
-        "captured_at": datetime.now(UTC).isoformat(),
-        "reason": reason,
-    }
     message = transcript_message(payload)
     # Stop owns turn text: only carry the final message when Stop did not
-    # already capture that exact response for this session.
+    # already capture that exact response for this session.  A terminal segment
+    # legitimately carries no text at all, which the format records as "".
     if (
-        message
-        and not segment_path(root, STOP_KIND, stop_key(session_id, message)).exists()
+        not message
+        or segment_path(root, STOP_KIND, stop_key(session_id, message)).exists()
     ):
-        record["last_assistant_message"] = message
-    write_segment(segment_path(root, SESSION_END_KIND, key), record)
+        message = ""
+    write_segment(
+        segment_path(root, SESSION_END_KIND, key),
+        build_record(
+            root,
+            SESSION_END_KIND,
+            key,
+            session_id,
+            text=message,
+            reason=reason,
+            transcript_path=transcript_location(payload),
+        ),
+    )
 
 
 def capture(root: Path, payload: dict[str, object], kind: str) -> int:
