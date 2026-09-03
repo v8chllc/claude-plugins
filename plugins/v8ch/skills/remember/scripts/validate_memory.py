@@ -15,6 +15,9 @@ from typing import Any
 from lifecycle_segments import valid_segment
 
 MEMORY_TYPES = ("entity", "decision", "context", "error", "preference", "todo")
+MEMORY_SECTIONS = ("entity", "decision", "error", "preference", "todo")
+LOCAL_CONTEXT_DIR = ".remember/local"
+LOCAL_CONTEXT_FILE = ".remember/local/context.md"
 REQUIRED_FIELDS = {
     "entity": ("Entity", "Type", "Location", "Purpose", "Dependencies"),
     "decision": ("Decision", "Date", "Rationale"),
@@ -28,6 +31,15 @@ JOURNAL_BLOCK_RE = re.compile(r"<!--\s*remember-journal(?P<body>.*?)-->", re.DOT
 MARKER_RE = re.compile(r"<!--\s*(?P<kind>[a-z][a-z-]*)\s*-->")
 HEADING_RE = re.compile(r"^##\s+(?P<section>[A-Za-z][A-Za-z -]*)\s*$", re.MULTILINE)
 FAST_TRACK_HEADING = "## Memory Fast-Track Workflow"
+FAST_TRACK_REQUIRED_TOKENS = (
+    "CODING_STANDARDS.md",
+    "WORKFLOW_STANDARDS.md",
+    ".remember/MEMORY.md",
+    ".remember/memory/",
+)
+STALE_CONTEXT_CLAUSE_RE = re.compile(
+    r"single\s+(?:active\s+)?`context`\s+entry", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)
@@ -116,7 +128,7 @@ def validate_memory_file(root: Path, issues: list[Issue]) -> None:
     sections = {
         match.group("section").strip().lower() for match in HEADING_RE.finditer(text)
     }
-    for memory_type in MEMORY_TYPES:
+    for memory_type in MEMORY_SECTIONS:
         if memory_type not in sections:
             add_issue(
                 issues,
@@ -126,8 +138,17 @@ def validate_memory_file(root: Path, issues: list[Issue]) -> None:
                 f"Missing required section ## {memory_type}.",
                 f"Add a ## {memory_type} section to .remember/MEMORY.md.",
             )
+    if "context" in sections:
+        add_issue(
+            issues,
+            "warning",
+            "legacy_context_section",
+            memory_path,
+            "Found a legacy ## context section; context now lives in "
+            f"{LOCAL_CONTEXT_FILE}.",
+            "Remove the ## context section from .remember/MEMORY.md.",
+        )
 
-    context_count = 0
     for kind, block in memory_entries(text):
         if kind not in MEMORY_TYPES:
             add_issue(
@@ -140,7 +161,17 @@ def validate_memory_file(root: Path, issues: list[Issue]) -> None:
             )
             continue
         if kind == "context":
-            context_count += 1
+            add_issue(
+                issues,
+                "error",
+                "context_entry_in_memory_file",
+                memory_path,
+                "Curated context must not live in .remember/MEMORY.md; that "
+                "file is shared through Git and context goes stale on other "
+                "checkouts.",
+                f"Move the entry to {LOCAL_CONTEXT_FILE} and remove it here.",
+            )
+            continue
         fields = parse_fields(block)
         for required in REQUIRED_FIELDS[kind]:
             if not fields.get(required):
@@ -152,12 +183,73 @@ def validate_memory_file(root: Path, issues: list[Issue]) -> None:
                     f"{kind} entry is missing required field {required}.",
                     f"Add {required}: <value> to the {kind} entry.",
                 )
+
+
+def local_context_ignored(root: Path) -> bool | None:
+    """Report whether `.remember/local/` is ignored, or None outside Git."""
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", LOCAL_CONTEXT_DIR],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if result.returncode == 0:
+        return True
+    if result.returncode == 1:
+        return False
+    return None
+
+
+def validate_local_context(root: Path, issues: list[Issue]) -> None:
+    local_dir = root / ".remember" / "local"
+    context_path = local_dir / "context.md"
+    if local_dir.is_dir() and local_context_ignored(root) is False:
+        add_issue(
+            issues,
+            "error",
+            "local_context_not_ignored",
+            local_dir,
+            f"{LOCAL_CONTEXT_DIR} is not ignored by Git; local context must "
+            "never be shared with another checkout.",
+            f"Add {LOCAL_CONTEXT_DIR}/ to .gitignore.",
+        )
+    if not context_path.is_file():
+        return
+    text = context_path.read_text(encoding="utf-8")
+    context_count = 0
+    for kind, block in memory_entries(text):
+        if kind != "context":
+            add_issue(
+                issues,
+                "error",
+                "unknown_memory_marker",
+                context_path,
+                f"Unknown memory entry marker <!-- {kind} -->.",
+                "The local context file holds <!-- context --> entries only.",
+            )
+            continue
+        context_count += 1
+        fields = parse_fields(block)
+        for required in REQUIRED_FIELDS["context"]:
+            if not fields.get(required):
+                add_issue(
+                    issues,
+                    "error",
+                    "required_field_missing",
+                    context_path,
+                    f"context entry is missing required field {required}.",
+                    f"Add {required}: <value> to the context entry.",
+                )
     if context_count > 1:
         add_issue(
             issues,
             "error",
             "duplicate_context_entries",
-            memory_path,
+            context_path,
             f"Found {context_count} active context entries; keep at most one.",
             "Merge current state into a single <!-- context --> entry.",
         )
@@ -308,6 +400,10 @@ If any other tracked, staged, modified, deleted, or untracked path is present,
 stop and ask the user whether to handle that work separately. Do not include
 non-memory files in a memory fast-track.
 
+`.remember/local/` holds gitignored local-only context. It never appears in
+`git status --short`, so it cannot reach this gate. Do not add it to the
+allowlist.
+
 Required sequence:
 
 1. Confirm the user explicitly requested a memory fast-track.
@@ -315,7 +411,7 @@ Required sequence:
    are present.
 3. Fetch and integrate the latest `origin/{branch}` before committing.
 4. Resolve conflicts only in allowed memory files; preserve journal chronology
-   and update the single active `context` entry instead of duplicating it.
+   and dedupe structured entries in `.remember/MEMORY.md`.
 5. Review memory content for obvious secrets or sensitive account data.
 6. Run `git diff --check`.
 7. Commit with a conventional memory message such as
@@ -326,6 +422,50 @@ Required sequence:
 10. Fetch after merge or push and verify `origin/{branch}` contains the memory
     commit before reporting completion.
 """.strip()
+
+
+def fast_track_body(text: str) -> str:
+    start = text.find(FAST_TRACK_HEADING)
+    if start == -1:
+        return ""
+    body = text[start + len(FAST_TRACK_HEADING) :]
+    match = re.search(r"^##\s", body, re.MULTILINE)
+    return body[: match.start()] if match else body
+
+
+def check_fast_track_drift(
+    path: Path,
+    text: str,
+    steering_file: str,
+    issues: list[Issue],
+) -> None:
+    body = fast_track_body(text)
+    missing = [
+        token
+        for token in (steering_file, *FAST_TRACK_REQUIRED_TOKENS)
+        if token not in body
+    ]
+    if missing:
+        add_issue(
+            issues,
+            "warning",
+            "fast_track_steering_drift",
+            path,
+            "Memory Fast-Track allowlist is missing: " + ", ".join(missing) + ".",
+            "Restore the missing paths to the allowlist; the gate fails open "
+            "for any path it does not name.",
+        )
+    if STALE_CONTEXT_CLAUSE_RE.search(body):
+        add_issue(
+            issues,
+            "warning",
+            "fast_track_steering_drift",
+            path,
+            "Memory Fast-Track conflict step still references a single active "
+            f"context entry; context now lives in {LOCAL_CONTEXT_FILE}.",
+            "Update the conflict-resolution step to dedupe structured entries "
+            "in .remember/MEMORY.md.",
+        )
 
 
 def inspect_steering(
@@ -348,6 +488,7 @@ def inspect_steering(
         return False
     text = path.read_text(encoding="utf-8")
     if FAST_TRACK_HEADING in text:
+        check_fast_track_drift(path, text, steering_file, issues)
         return False
     lower = text.lower()
     if "memory" in lower and "fast-track" in lower:
@@ -453,6 +594,7 @@ def main(argv: list[str] | None = None) -> int:
     root = args.root.resolve()
     issues: list[Issue] = []
     validate_memory_file(root, issues)
+    validate_local_context(root, issues)
     validate_journals(root, issues)
     validate_lifecycle_segments(root, issues)
     fast_track_added = False
