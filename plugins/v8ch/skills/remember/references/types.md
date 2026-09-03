@@ -1,6 +1,8 @@
 # Memory Types
 
-Six structured types for `.remember/MEMORY.md`. Use these templates when writing entries.
+Six structured types. Five are curated memory in `.remember/MEMORY.md`;
+`context` is local-only state in `.remember/local/context.md`. Use these
+templates when writing entries.
 
 ---
 
@@ -83,8 +85,15 @@ Status: resolved
 
 ## context
 
-Current project state, what is in progress, and what is blocked. Update this type
-rather than appending a new entry — there should be at most one active context entry.
+Current project state, what is in progress, and what is blocked.
+
+**Stored in `.remember/local/context.md`, never in `.remember/MEMORY.md`.** That
+directory is gitignored, so context stays in the checkout that wrote it. Context
+is state as of a moment on one machine; shared through Git it reads as durable
+fact on every other checkout long after it stopped being true.
+
+Update this type rather than appending a new entry — the file holds at most one
+active context entry.
 
 Template:
 ```
