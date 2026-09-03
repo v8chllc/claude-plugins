@@ -205,6 +205,7 @@ def local_context_ignored(root: Path) -> bool | None:
 
 
 def validate_local_context(root: Path, issues: list[Issue]) -> None:
+    """Validate the gitignored local context file and its entries."""
     local_dir = root / ".remember" / "local"
     context_path = local_dir / "context.md"
     if local_dir.is_dir() and local_context_ignored(root) is False:
@@ -425,6 +426,7 @@ Required sequence:
 
 
 def fast_track_body(text: str) -> str:
+    """Extract the body content of the Memory Fast-Track Workflow section."""
     start = text.find(FAST_TRACK_HEADING)
     if start == -1:
         return ""
@@ -439,6 +441,7 @@ def check_fast_track_drift(
     steering_file: str,
     issues: list[Issue],
 ) -> None:
+    """Check for drift between fast-track steering and required allowlist paths."""
     body = fast_track_body(text)
     missing = [
         token
