@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ JOURNAL_NAME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 JOURNAL_BLOCK_RE = re.compile(r"<!--\s*remember-journal(?P<body>.*?)-->", re.DOTALL)
 MARKER_RE = re.compile(r"<!--\s*(?P<kind>[a-z][a-z-]*)\s*-->")
 HEADING_RE = re.compile(r"^##\s+(?P<section>[A-Za-z][A-Za-z -]*)\s*$", re.MULTILINE)
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 FAST_TRACK_HEADING = "## Memory Fast-Track Workflow"
 FAST_TRACK_REQUIRED_TOKENS = (
     "CODING_STANDARDS.md",
@@ -89,6 +91,17 @@ def parse_fields(block: str) -> dict[str, str]:
         key, value = line.split(":", 1)
         fields[key.strip()] = value.strip()
     return fields
+
+
+def valid_date(value: str) -> bool:
+    """Report whether a field value is a real calendar date in YYYY-MM-DD form."""
+    if not DATE_RE.fullmatch(value):
+        return False
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
 
 
 def memory_entries(text: str) -> list[tuple[str, str]]:
@@ -245,6 +258,16 @@ def validate_local_context(root: Path, issues: list[Issue]) -> None:
                     f"context entry is missing required field {required}.",
                     f"Add {required}: <value> to the context entry.",
                 )
+        updated = fields.get("Updated")
+        if updated and not valid_date(updated):
+            add_issue(
+                issues,
+                "error",
+                "context_updated_invalid",
+                context_path,
+                f"context entry has an invalid Updated date {updated!r}.",
+                "Use a real calendar date in YYYY-MM-DD form.",
+            )
     if context_count > 1:
         add_issue(
             issues,
