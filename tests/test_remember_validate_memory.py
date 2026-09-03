@@ -381,6 +381,26 @@ Updated: 2026-07-03
     assert any("In progress" in issue["message"] for issue in payload["issues"])
 
 
+def test_local_context_invalid_updated_date_is_reported(tmp_path: Path) -> None:
+    """Verify that an Updated value that is not a real date is reported."""
+    write_valid_memory(tmp_path)
+    write_local_context(
+        tmp_path,
+        """<!-- context -->
+Status: Implementing validation
+In progress: Adding focused tests
+Updated: 2026-02-31
+""",
+    )
+
+    result = run_validate(tmp_path, "--json")
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    codes = {issue["code"] for issue in payload["issues"]}
+    assert "context_updated_invalid" in codes
+
+
 def test_unknown_marker_in_local_context_is_reported(tmp_path: Path) -> None:
     """Verify that a non-context marker in local context is reported as an error."""
     write_valid_memory(tmp_path)
