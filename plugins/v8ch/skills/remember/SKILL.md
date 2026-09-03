@@ -100,11 +100,8 @@ Triggered by `/remember` with no args.
 2. Check whether `.remember/MEMORY.md` and `.remember/memory/` exist in cwd.
    If either is missing, report that `/remember setup` is needed. Do not create files.
 3. Read `.remember/MEMORY.md` when present.
-4. Read `.remember/local/context.md` when present. Before computing its age,
-   require a non-empty `Updated` field containing a valid `YYYY-MM-DD` calendar
-   date. If it is missing or invalid, report the local context as malformed and
-   make no age or staleness claim until a valid value is available. Otherwise,
-   compute its age in days against today's date.
+4. Read `.remember/local/context.md` when present, and compute its age in days
+   from the `Updated` field against today's date.
 5. Find dated journal files matching `.remember/memory/YYYY-MM-DD.md` and
    select the most recent one by date. Ignore non-dated files. This selection
    is not limited to today or yesterday; load the newest dated journal even if
@@ -135,12 +132,9 @@ Triggered by `/remember setup` or natural language setup phrases.
 3. Create `.remember/local/` for the local context lane if it is missing.
 4. Ensure `.remember/local/` is git-ignored; run
    `git check-ignore -q .remember/local` to check. If it is not ignored and a
-   `.gitignore` exists, ensure the file ends with a newline (inserting one when
-   needed), then append the rule `.remember/local/`. After updating the file,
-   require `git check-ignore -q .remember/local` to succeed. If no `.gitignore`
+   `.gitignore` exists, append the rule `.remember/local/`. If no `.gitignore`
    exists, ask before creating one. An unignored local lane defeats the point of
-   the lane, so do not migrate or write context until the ignore check succeeds;
-   stop without writing if it fails.
+   the lane, so do not migrate context into it until the path is ignored.
 5. If `.remember/MEMORY.md` is missing, write this stub:
 
 ```
@@ -225,11 +219,8 @@ Triggered by `/remember <type> <content>` or natural language equivalent.
    rather than append.
 6. Write the entry using the template from `references/types.md`. In
    `.remember/MEMORY.md`, append or update under the correct `## <type>`
-   section. For `context`, first reuse Workflow B's ignore precondition: ensure
-   `.remember/local/` is covered by the ignore rule and require
-   `git check-ignore -q .remember/local` to succeed. Stop without creating or
-   writing `.remember/local/context.md` if it fails. Once it succeeds, write
-   `.remember/local/context.md` whole.
+   section. For `context`, write `.remember/local/context.md` whole, first
+   creating `.remember/local/` and its ignore rule if setup has not.
 7. Confirm to user: type recorded, subject, target file, and whether it was added or updated.
 
 ---
@@ -487,11 +478,9 @@ remember", or "validate memory".
    entry markers, and required fields. A `<!-- context -->` entry there is an
    error (`context_entry_in_memory_file`); a leftover `## context` heading is a
    warning (`legacy_context_section`).
-3. Validation allows `.remember/local/context.md` to be absent before the first
-   context write. When the file exists, it requires exactly one well-formed
-   `context` entry, reports a validation error for zero or duplicate entries,
-   and reports `local_context_not_ignored` when `.remember/local/` exists in a
-   Git repository without being ignored.
+3. Validation checks `.remember/local/context.md` for a single well-formed
+   `context` entry, and reports `local_context_not_ignored` when
+   `.remember/local/` exists in a Git repository without being ignored.
 4. Validation checks `.remember/memory/YYYY-MM-DD.md` journal filenames and
    `remember-journal` metadata blocks, plus valid `version: 3` Stop and
    SessionEnd lifecycle segments from every platform.

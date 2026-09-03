@@ -68,10 +68,7 @@ Triggered by `/recommend session`.
    operation.
 4. Identify curated candidates (entity, decision, error, context, preference) and procedural candidates (workflow lessons, coding/arch standards, skill/tool routines).
 5. Resolve each procedural candidate to an approved target from `../remember/references/procedural-targets.md`. If no target fits, mark as unsupported.
-6. Dedupe curated candidates against `.remember/MEMORY.md`, and any `context`
-   candidate against `.remember/local/context.md`; dedupe procedural candidates
-   against their respective target files. Classify existing local context as
-   `update` or `skip`, never `add`.
+6. Dedupe curated candidates against `.remember/MEMORY.md`; dedupe procedural candidates against their respective target files.
 7. Present recommendations grouped by target and action: `add`, `update`, `skip`. List unsupported procedural candidates separately with a note.
 8. Before applying approved changes, run
    `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude`.

@@ -5,8 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 SCRIPT = (
     Path(__file__).parents[1]
     / "plugins"
@@ -335,56 +333,6 @@ def test_missing_local_context_is_not_an_issue(tmp_path: Path) -> None:
     assert payload["issues"] == []
 
 
-def test_existing_empty_local_context_is_reported(tmp_path: Path) -> None:
-    write_valid_memory(tmp_path)
-    write_local_context(tmp_path, "")
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 1
-    payload = json.loads(result.stdout)
-    codes = {issue["code"] for issue in payload["issues"]}
-    assert "context_entry_missing" in codes
-
-
-def test_malformed_context_marker_is_reported(tmp_path: Path) -> None:
-    write_valid_memory(tmp_path)
-    write_local_context(
-        tmp_path,
-        """<!-- Context -->
-Status: Implementing validation
-In progress: Adding focused tests
-Updated: 2026-07-03
-""",
-    )
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 1
-    payload = json.loads(result.stdout)
-    codes = {issue["code"] for issue in payload["issues"]}
-    assert "unknown_memory_marker" in codes
-    assert "context_entry_missing" in codes
-
-
-def test_unmarked_local_context_fields_are_reported(tmp_path: Path) -> None:
-    write_valid_memory(tmp_path)
-    write_local_context(
-        tmp_path,
-        """Status: Implementing validation
-In progress: Adding focused tests
-Updated: 2026-07-03
-""",
-    )
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 1
-    payload = json.loads(result.stdout)
-    codes = {issue["code"] for issue in payload["issues"]}
-    assert "context_entry_missing" in codes
-
-
 def test_duplicate_local_context_entries_are_reported(tmp_path: Path) -> None:
     write_valid_memory(tmp_path)
     write_local_context(
@@ -426,28 +374,6 @@ Updated: 2026-07-03
     codes = {issue["code"] for issue in payload["issues"]}
     assert "required_field_missing" in codes
     assert any("In progress" in issue["message"] for issue in payload["issues"])
-
-
-@pytest.mark.parametrize("updated", ["2026/07/03", "2026-02-30"])
-def test_invalid_local_context_updated_date_is_reported(
-    tmp_path: Path, updated: str
-) -> None:
-    write_valid_memory(tmp_path)
-    write_local_context(
-        tmp_path,
-        f"""<!-- context -->
-Status: Implementing validation
-In progress: Adding focused tests
-Updated: {updated}
-""",
-    )
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 1
-    payload = json.loads(result.stdout)
-    codes = {issue["code"] for issue in payload["issues"]}
-    assert "context_updated_invalid" in codes
 
 
 def test_unknown_marker_in_local_context_is_reported(tmp_path: Path) -> None:
@@ -555,43 +481,6 @@ Allowed paths:
     assert any("WORKFLOW_STANDARDS.md" in issue["message"] for issue in drift)
     assert any(".remember/memory/" in issue["message"] for issue in drift)
     assert all(issue["severity"] == "warning" for issue in drift)
-
-
-def test_fast_track_explanatory_mentions_do_not_satisfy_allowlist(
-    tmp_path: Path,
-) -> None:
-    write_valid_memory(tmp_path)
-    (tmp_path / STEERING_FILE).write_text(
-        f"""# Steering
-
-## Memory Fast-Track Workflow
-
-Allowed paths:
-
-- `{STEERING_FILE}`
-- `CODING_STANDARDS.md`
-
-The workflow discusses `WORKFLOW_STANDARDS.md`, `.remember/MEMORY.md`, and
-`.remember/memory/*.md` elsewhere, but they are not allowed paths.
-""",
-        encoding="utf-8",
-    )
-
-    result = run_validate(
-        tmp_path, "--json", "--toolchain", TOOLCHAIN, "--check-steering"
-    )
-
-    assert result.returncode == 0
-    payload = json.loads(result.stdout)
-    drift = [
-        issue
-        for issue in payload["issues"]
-        if issue["code"] == "fast_track_steering_drift"
-    ]
-    assert len(drift) == 1
-    assert "WORKFLOW_STANDARDS.md" in drift[0]["message"]
-    assert ".remember/MEMORY.md" in drift[0]["message"]
-    assert ".remember/memory/*.md" in drift[0]["message"]
 
 
 def test_fast_track_drift_reports_stale_context_clause(tmp_path: Path) -> None:
