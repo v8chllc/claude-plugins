@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -28,15 +29,20 @@ REQUIRED_FIELDS = {
 }
 JOURNAL_NAME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 JOURNAL_BLOCK_RE = re.compile(r"<!--\s*remember-journal(?P<body>.*?)-->", re.DOTALL)
-MARKER_RE = re.compile(r"<!--\s*(?P<kind>[a-z][a-z-]*)\s*-->")
+MARKER_RE = re.compile(r"<!--\s*(?P<kind>[A-Za-z][A-Za-z-]*)\s*-->")
 HEADING_RE = re.compile(r"^##\s+(?P<section>[A-Za-z][A-Za-z -]*)\s*$", re.MULTILINE)
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 FAST_TRACK_HEADING = "## Memory Fast-Track Workflow"
 FAST_TRACK_REQUIRED_TOKENS = (
     "CODING_STANDARDS.md",
     "WORKFLOW_STANDARDS.md",
     ".remember/MEMORY.md",
-    ".remember/memory/",
+    ".remember/memory/*.md",
 )
+FAST_TRACK_ALLOWLIST_LABEL_RE = re.compile(
+    r"^(?:Allowed paths|.*guidance files):\s*$", re.IGNORECASE | re.MULTILINE
+)
+FAST_TRACK_ALLOWLIST_ENTRY_RE = re.compile(r"^\s*-\s+`(?P<path>[^`]+)`\s*$")
 STALE_CONTEXT_CLAUSE_RE = re.compile(
     r"single\s+(?:active\s+)?`context`\s+entry", re.IGNORECASE
 )
@@ -89,6 +95,16 @@ def parse_fields(block: str) -> dict[str, str]:
         key, value = line.split(":", 1)
         fields[key.strip()] = value.strip()
     return fields
+
+
+def valid_date(value: str) -> bool:
+    if not DATE_RE.fullmatch(value):
+        return False
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
 
 
 def memory_entries(text: str) -> list[tuple[str, str]]:
@@ -220,6 +236,16 @@ def validate_local_context(root: Path, issues: list[Issue]) -> None:
     if not context_path.is_file():
         return
     text = context_path.read_text(encoding="utf-8")
+    marker_matches = list(MARKER_RE.finditer(text))
+    if marker_matches and text[: marker_matches[0].start()].strip():
+        add_issue(
+            issues,
+            "error",
+            "unexpected_local_context_content",
+            context_path,
+            "Local context has content before its first entry marker.",
+            "Remove unmarked content so the file starts with <!-- context -->.",
+        )
     context_count = 0
     for kind, block in memory_entries(text):
         if kind != "context":
@@ -244,6 +270,25 @@ def validate_local_context(root: Path, issues: list[Issue]) -> None:
                     f"context entry is missing required field {required}.",
                     f"Add {required}: <value> to the context entry.",
                 )
+        updated = fields.get("Updated")
+        if updated and not valid_date(updated):
+            add_issue(
+                issues,
+                "error",
+                "context_updated_invalid",
+                context_path,
+                f"context entry has invalid Updated date {updated!r}.",
+                "Use a valid calendar date in YYYY-MM-DD format.",
+            )
+    if context_count == 0:
+        add_issue(
+            issues,
+            "error",
+            "context_entry_missing",
+            context_path,
+            "Local context file has no valid <!-- context --> entry.",
+            "Write one lowercase <!-- context --> entry using the context template.",
+        )
     if context_count > 1:
         add_issue(
             issues,
@@ -433,6 +478,22 @@ def fast_track_body(text: str) -> str:
     return body[: match.start()] if match else body
 
 
+def fast_track_allowed_paths(body: str) -> set[str]:
+    label = FAST_TRACK_ALLOWLIST_LABEL_RE.search(body)
+    if not label:
+        return set()
+    paths: set[str] = set()
+    for line in body[label.end() :].splitlines():
+        entry = FAST_TRACK_ALLOWLIST_ENTRY_RE.fullmatch(line)
+        if entry:
+            paths.add(entry.group("path"))
+        elif paths and line.strip():
+            break
+        elif not paths and line.strip():
+            break
+    return paths
+
+
 def check_fast_track_drift(
     path: Path,
     text: str,
@@ -440,10 +501,11 @@ def check_fast_track_drift(
     issues: list[Issue],
 ) -> None:
     body = fast_track_body(text)
+    allowed_paths = fast_track_allowed_paths(body)
     missing = [
         token
         for token in (steering_file, *FAST_TRACK_REQUIRED_TOKENS)
-        if token not in body
+        if token not in allowed_paths
     ]
     if missing:
         add_issue(
