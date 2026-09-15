@@ -96,6 +96,15 @@ Grade by what happens if the defect ships, phrased in standards terms:
 - **MEDIUM** — a violation of a stated rule with a concrete maintenance cost.
 - **LOW** — a deviation from a stated convention with no reachable consequence.
 
+## Do not write
+
+Inspect and report; never change the repository. You may read any file, run the
+checks above, and write scratch files outside the repository. Do not edit
+tracked files, create commits, or run a command that changes the working tree.
+The orchestrator compares the working tree around the reviewer batch and aborts
+the run on any difference, so one stray write ends the review for all three
+reviewers.
+
 ## Citations
 
 Cite locations as repository-relative paths of tracked files, with line numbers.

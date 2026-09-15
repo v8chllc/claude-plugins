@@ -34,6 +34,11 @@ thresholds, and no score-gap targeting.
 - **`QUALITY_FAILURES`** — the repository's quality commands still fail and the
   fixer could not resolve them. Commit nothing. Emit `QUALITY_FAILURES` with the
   score, the review URL, and the failing commands, then stop.
+
+  Leave the fixer's edits in the working tree. They are most of a repair, and
+  discarding them loses work with no record. Say in the final report that the
+  tree holds uncommitted changes, because the next invocation's default scope is
+  `git diff HEAD` and will review them as local work.
 - **No files changed** — `git status --porcelain` is empty. There is nothing to
   commit or push; go straight to the terminal signal for the cycle.
 
@@ -69,6 +74,9 @@ decide the next step against its three-review budget:
 - Budget remaining — start the next review cycle.
 - Budget exhausted, findings remain `partial` or `work-item-required` — emit
   `BLOCKERS_REMAIN`.
+- The fix log leaves a current finding with no disposition — the pass was
+  incomplete. Commit whatever landed, then emit `BLOCKERS_REMAIN` naming that
+  finding, whatever the budget allows.
 - Budget exhausted, nothing outstanding but no `clean` review — emit
   `PUSH_COMPLETE`.
 
