@@ -1,297 +1,201 @@
 ---
 name: consensus-review
-description: Runs a multi-agent consensus code review. Use when reviewing code changes, before pushing a PR, or as the review step in a development workflow. Spawns three independent reviewers (standards-reviewer, correctness-reviewer, architecture-reviewer) in parallel, then passes their outputs to review-synthesizer for a tiered consensus report with a 1-100 quality score. Accepts an optional plan file; when provided, reviewers also check for plan divergences. Scope defaults to all local changes (staged, unstaged, and untracked); also accepts a base commit SHA, branch diff, or explicit file list.
+description: Runs an autonomous, evidence-gated consensus code review. Use when reviewing code changes, before pushing a PR, or as the review step in a development workflow. Runs three independent reviewers in parallel, synthesizes a consequence-ranked report with a 1-100 quality score, and posts one review comment per cycle to the PR or MR. On a PR or MR it also fixes and re-reviews, up to three reviews per invocation. Accepts an optional plan file as review context. Scope defaults to all local changes; also accepts a PR/MR number, a base commit SHA, a branch diff, or an explicit file list.
 ---
 
 # Consensus Review
 
-Orchestrates three independent reviewer agents and one synthesis agent to produce a stable, tiered consensus review. When a PR or MR number is provided, the PR/MR comment thread is the durable audit trail and the source of truth for future cycles.
+Three reviewers examine the change independently, a synthesizer ranks their
+findings by consequence and scores the result, and — on a PR or MR — one comment
+per cycle records it. That comment thread is the audit trail: later cycles
+recover it, and it is the only durable artifact this skill writes.
 
-## Mode detection
+The run is always autonomous. There are no operator prompts and no interactive
+branches. It ends with exactly one terminal signal.
+
+## Success criteria
+
+- Three reviewer reports, each with a complete Evidence section.
+- One synthesized report carrying a score, a status, and numbered findings.
+- On a PR/MR: one posted review comment per cycle, and fix evidence in the fix
+  commit body rather than in a second comment.
+- Exactly one fenced `consensus-review-signal` block as the last output.
+
+## Inputs
+
+1. **PR/MR number** (optional) — when present, the diff comes from the platform
+   and the thread is the audit trail.
+2. **Plan file** (optional) — review context only. A plan never sets a severity
+   and never deducts points.
+3. **Scope** — resolved by the ladder below.
+
+## Scope ladder
+
+Take the first match:
+
+1. **PR/MR number** — fetch with `gh pr diff <number>` or `glab mr diff
+   <number>`, reading `DEV_SEC_OPS_PLATFORM` from `.env` at the repository root.
+   Before anything else, confirm local `HEAD` equals the PR/MR head SHA. On a
+   mismatch, emit `ABORT` with `reason` `head_mismatch` and stop.
+2. **Base commit SHA** — `git diff <sha>`, plus `git ls-files --others
+   --exclude-standard`.
+3. **Branch diff** — the `git diff` range for that branch.
+4. **Explicit file list** — `git diff -- <paths>`.
+5. **Default** — `git diff HEAD`, plus `git ls-files --others
+   --exclude-standard`.
+
+For levels 2 and 5, read each untracked file in full and include its contents in
+the diff, labeled as a new file.
+
+If the resolved scope is empty, emit `NO_DIFF` and stop.
+
+## Cycle scope
+
+Cycle 01 reviews the full diff.
+
+A later cycle reviews `git diff <reviewed_sha>..HEAD`, where `reviewed_sha` comes
+from the latest valid schema-v2 review comment, and also confirms whether the
+prior cycle's findings closed. The narrowing is by time, not by file: every
+commit since that SHA is in scope whatever it touches, so a regression a fix
+introduced anywhere is still reviewed.
+
+Review the full diff, and state that basis in the comment, when there is no
+prior review, when the only prior review is legacy schema v1, or when the
+recorded SHA is no longer an ancestor of `HEAD`. `recover_context.py` resolves
+this and prints both the basis and the reason.
+
+## Roles
+
+Six roles ship with this plugin. Invoke each by its namespaced name, so a
+project-level agent sharing a bare name is never selected:
 
-Before running Step 0, parse the user's trigger phrase to decide between **interactive** and **autonomous** modes. Set the `AUTONOMOUS` flag once and use it for the rest of the run.
+| Role | Invoke as |
+| --- | --- |
+| Standards review | `v8ch:standards-reviewer` |
+| Correctness review | `v8ch:correctness-reviewer` |
+| Architecture review | `v8ch:architecture-reviewer` |
+| Synthesis | `v8ch:review-synthesizer` |
+| Posting | `v8ch:consensus-review-poster` |
+| Fixing | `v8ch:consensus-review-fixer` |
 
-Autonomous mode is the default. Set `AUTONOMOUS=false` only when the trigger explicitly requests operator prompts with one of the interactive keywords below.
+Only the three reviewers are delegated, and they run as one parallel batch:
+their work is genuinely independent, and none of them reads another's output.
+Everything else in the run is yours. Record the delegation mode as
+`parallel-subagents`, or `sequential-fallback` if the batch could not run in
+parallel and you ran the reviewers one at a time instead.
 
-Set `AUTONOMOUS=false` when the trigger phrase matches the regex `\b(interactive|manually|manual|prompt|ask-me|with-confirmation)\b`, case-insensitive.
+Pass each role the absolute skill directory, `${CLAUDE_SKILL_DIR}`, in its
+prompt. Agents do not receive skill variables.
 
-Otherwise set `AUTONOMOUS=true`.
+## Workflow
 
-**Trigger examples:**
+1. **Recover context.** With a PR/MR number:
 
-- `review PR 123` → `AUTONOMOUS=true` (autonomous default).
-- `review PR 123 interactively` → `AUTONOMOUS=false`.
-- `run a manual consensus review on MR 47` → `AUTONOMOUS=false`.
-- `review PR 9 with-confirmation` → `AUTONOMOUS=false`.
+   ```bash
+   uv run ${CLAUDE_SKILL_DIR}/scripts/recover_context.py <number> --repo-dir <repo-root>
+   ```
 
-In autonomous mode, do not prompt the operator for any input during the run. Steps that would otherwise prompt must instead use the documented autonomous branch or emit a `consensus-review-signal` block (see "Exit signals" appendix) and stop.
+   Keep the output as `RECOVERED_CONTEXT`. It gives the next cycle number — use
+   it, do not recompute it — the scope basis with its reason, and the prior
+   reviews in full. Without a PR/MR number, the cycle is `0` and there is no
+   recovered context.
 
-### Autonomous cycle limit
+2. **Read the repository.** Read the changed-file context a reviewer cannot get
+   from the diff alone: the callers, the invariants the change relies on, and
+   the failure paths it touches.
 
-Set `MAX_AUTONOMOUS_CYCLES=5`. Each completed review is one cycle. In autonomous mode, never start a sixth review cycle. If cycle 5 finishes with a routing result that would require another fix/review pass, emit the `MAX_CYCLES_REACHED` exit signal block with the latest score, review URL when available, and remaining findings or blockers in `details`, then stop.
+3. **Run the three reviewers in one parallel batch.** Issue all three calls in a
+   single response. Give each one the diff, the changed-file context, the plan
+   when supplied, `RECOVERED_CONTEXT` when it exists, and
+   `${CLAUDE_SKILL_DIR}`.
 
-### Trigger-phrase parsing
+4. **Apply the evidence gate.** A reviewer output without an `## Evidence`
+   section carrying both `Files examined` and `Commands run` failed its pass.
+   Rerun that reviewer once. On a second failure, emit `EVIDENCE_FAILED` with
+   the failed pass names and stop, with no score.
 
-The trigger phrase is parsed once at the start of the run. The full set of recognized tokens:
+5. **Synthesize.** Invoke `v8ch:review-synthesizer` with all three outputs
+   labeled in full, the delegation mode, the plan source, and
+   `RECOVERED_CONTEXT`. It decides the score and the status; you do not
+   recompute either.
 
-- **Interactive keywords:** `interactive`, `manually`, `manual`, `prompt`, `ask-me`, `with-confirmation` (regex `\b(interactive|manually|manual|prompt|ask-me|with-confirmation)\b`, case-insensitive). Any match sets `AUTONOMOUS=false`.
-- **Autonomous keywords:** `autonomous`, `autonomously`, `non-interactive` are accepted for readability but are no longer required. They leave `AUTONOMOUS=true` unless an interactive keyword is also present.
-- **Optional `on_quality_failure: abort` token** — recognized in autonomous mode only. If the trigger phrase contains the literal token `on_quality_failure: abort`, set the fix-workflow Step 6 failure policy to `abort` (see `references/fix-workflow.md` Step 6). Any other value, or no token, leaves the policy at the default `continue`. In interactive mode this token is ignored.
+6. **Return or post.**
+   - **No PR/MR number:** return the report as-is, emit `REVIEW_COMPLETE` with
+     `review_url` `null`, and stop. A local review never fixes.
+   - **PR/MR number:** invoke `v8ch:consensus-review-poster` once with the
+     report, the PR/MR number, the cycle, the status, the score, the delegation
+     mode, the plan source, the reviewed SHA, the scope basis, the blast-radius
+     counts, the repository directory, `${CLAUDE_SKILL_DIR}`, and a scratch
+     directory. Capture the comment URL. If posting fails, emit `ABORT` with
+     `reason` `post_failed`.
 
-## Prerequisites
+7. **Branch on the status.**
+   - `clean` — emit `REVIEW_COMPLETE` and stop.
+   - `passing` or `failing` — run `references/fix-workflow.md`, then review
+     again if the budget allows.
 
-Eight agents are required. They live in two locations:
+## Budget
 
-**Workspace-specific reviewers** (`.claude/agents/` at the workspace root) — must be generated per workspace because their review mandates depend on the project's standards, test fixtures, and architecture:
-- `standards-reviewer`
-- `correctness-reviewer`
-- `architecture-reviewer`
+At most three reviews per invocation. Every invocation gets a fresh budget,
+whatever the PR/MR's cycle count and whichever toolchain wrote the earlier
+cycles. Cycle numbers themselves accumulate with no cap.
 
-If any of these three are missing, generate them using the `/meta-consensus-review-agents` command.
+When the third review is still not `clean`, emit `MAX_REVIEWS_REACHED` and stop.
 
-**Plugin-scoped agents** (shipped with the vault plugin at `plugins/vault/agents/`) — workspace-agnostic and already installed when the plugin is enabled:
-- `review-synthesizer` — synthesizes the three reviewers into a consensus report
-- `consensus-review-poster` — posts structured review, fix-validation, acceptance, and opt-in comments to the PR/MR
-- `consensus-review-fixer` — applies targeted fixes from the consensus report
-- `acceptance-recommender` — recommends findings whose fix is "no code change required"
-- `opt-in-recommender` — recommends Low-Confidence findings worth a one-shot fix attempt
+## Plan handling
 
-## Inputs Required
+A supplied plan is review context. Record its source identically in the report's
+Run Provenance line and in the `plan_source` metadata: the literal `none` when
+no plan was supplied, otherwise `supplied: <path or short description>`. Never
+recover a plan from PR/MR comments.
 
-1. **PR/MR number** (optional) — if provided, the diff is fetched from the platform and all audit persistence happens through PR/MR comments.
-2. **Plan file** (optional) — path to the implementation plan the code was built against. If not provided, reviewers evaluate intrinsic code quality only; plan conformance checks are skipped.
-3. **Code changes** — specify the scope as one of:
-   - *(default)* All local changes: staged, unstaged, and untracked files
-   - A base commit SHA to compare the working tree against
-   - A branch diff
-   - An explicit file list
+## Citations
 
-## Audit Source of Truth
+Everything published — the comment, the summary, the report — cites
+repository-relative paths of tracked files, or links. Never absolute paths, home
+directory paths, or untracked scratch files. Readers have no checkout of this
+machine.
 
-For PR/MR runs, do not create or depend on `.rouge` review directories. The durable audit trail is the PR/MR thread. Every consensus-review comment posted by `consensus-review-poster` includes hidden `consensus-review` metadata that `recover_context.py` reads on later cycles.
+## Length
 
-Local scratch files are allowed only to bridge agent/script interfaces during the current invocation. Treat them as disposable; never use them as historical truth.
+The synthesized report and the posted comment are the deliverables; keep them to
+what the contract specifies. Your own output outside the signal block is at most
+a few lines: what was reviewed, the score and status, and the comment URL. Do
+not narrate the steps as you take them, do not restate the report, and do not
+summarize the findings a second time.
 
-## Steps
+## Terminal signals
 
-### Step 0 — Recover prior cycle context (PR/MR number only)
+Every run ends with exactly one fenced block as its last output:
 
-If the trigger includes a PR or MR number, run context recovery before doing anything else:
-
-```bash
-uv run ${CLAUDE_SKILL_DIR}/scripts/recover_context.py <number> --repo-dir <repo-root>
-```
-
-The script reads `DEV_SEC_OPS_PLATFORM` from `.env` at the repo root to determine GitHub vs GitLab, fetches PR/MR comments, and parses consensus-review metadata blocks. Override with `--platform github|gitlab` if needed.
-
-Read the full output and keep it as `RECOVERED_CONTEXT`. It tells you:
-- The platform and audit source
-- The next cycle number — use this as `CYCLE`; do not recompute it
-- Prior review/fix summaries and comment URLs
-- Operator-accepted findings that must not be re-raised or fixed
-- Historical low-confidence opt-ins, which are informational only and must be prompted fresh each cycle
-
-If no prior consensus-review comments exist, the script still outputs `CYCLE = 01`. Continue normally.
-
----
-
-### Step 1 — Gather inputs
-
-Determine the code scope using the following priority ladder. Check each level in order and use the first match.
-
-**Priority 1 — PR/MR number given**
-
-If the trigger includes a PR or MR number:
-
-1. Read `DEV_SEC_OPS_PLATFORM` from `.env` at the workspace root.
-2. Fetch the diff using the appropriate command:
-   - `github`: `gh pr diff <number>`
-   - `gitlab`: `glab mr diff <number>`
-3. Use the fetched diff as the full code scope.
-4. Skip all git diff commands below.
-
-**Priority 2 — Base commit SHA given**
-
-```bash
-git diff <sha>
-git ls-files --others --exclude-standard
-```
-
-Read the full content of each untracked file and include it in the diff passed to reviewers, labeled clearly as a new file.
-
-**Priority 3 — Branch diff given**
-
-Use the appropriate `git diff` range for that branch.
-
-**Priority 4 — Explicit file list given**
-
-Diff only those files using `git diff -- <file1> <file2> ...`.
-
-**Priority 5 — Default (nothing specified)**
-
-```bash
-git diff HEAD
-git ls-files --others --exclude-standard
-```
-
-Read the full content of each untracked file and include it in the diff passed to reviewers, labeled clearly as a new file.
-
-If no changes are found at Priority 5:
-
-- **Interactive (`AUTONOMOUS=false`):** ask the user to clarify scope.
-- **Autonomous (`AUTONOMOUS=true`):** do not prompt. Emit the `NO_DIFF` exit signal block (see "Exit signals" appendix) and stop.
-
-If a plan file path was provided, read it in full. If no plan file was provided but `RECOVERED_CONTEXT` contains a Planning Context section with a plan, use that recovered plan — do not emit the "no plan file" notice in this case. If neither a plan file nor a recovered plan is available, notify the user before proceeding:
-
-> **Note:** No plan file provided. Reviewing changes for intrinsic quality only — plan conformance checks will be skipped.
-
-### Step 2 — Run three reviewers in parallel
-
-Spawn all three reviewer agents simultaneously using the Agent tool. Run all three calls in a single response — do not wait for one to complete before starting the others.
-
-Agents to invoke (by subagent_type):
-- `standards-reviewer`
-- `correctness-reviewer`
-- `architecture-reviewer`
-
-Each agent receives the full code diff and the plan document when one was provided. Do not persist raw reviewer outputs to `.rouge`. Keep their exact outputs in memory for synthesis and for the PR/MR audit comment.
-
-### Step 3 — Synthesize
-
-Once all three reviewer outputs are returned, invoke `review-synthesizer` with all three reviewer outputs in full, clearly labeled, plus review history:
-
-```text
-## standards-reviewer Output
-[Full standards-reviewer output]
----
-## correctness-reviewer Output
-[Full correctness-reviewer output]
----
-## architecture-reviewer Output
-[Full architecture-reviewer output]
----
-## Review History
-Current cycle: [CYCLE or "none"]
-Audit source: PR/MR comments or "none"
-[If PR/MR: paste RECOVERED_CONTEXT in full.]
-```
-
-The synthesizer uses recovered accepted findings to suppress accepted items and calibrate recurring findings across cycles.
-
-### Step 4 — Post review, then run recommenders, then post recommendations
-
-**If no PR/MR number was given:** present the synthesizer output directly to the user without summarizing or modifying it. Stop here.
-
-**If a PR/MR number was given:** post the review comment first (so the synthesizer's `[F-N]` numbering becomes canonical on the PR/MR thread), then run the recommenders in parallel, then post the consolidated recommendations comment.
-
-**Step 4a — Post the review comment.** Invoke `consensus-review-poster` with:
-
-- Comment type: `review`
-- The synthesizer output in full
-- The three raw reviewer outputs in full as audit appendices
-- The PR/MR number
-- `RECOVERED_CONTEXT`
-- The cycle number: `CYCLE`
-- The repo dir where `gh`/`glab` commands should run
-- The skill dir: `${CLAUDE_SKILL_DIR}`
-- A scratch directory for temporary summary/review files, if the poster needs one
-
-The poster owns status determination, summary authorship, temporary file creation, template-backed rendering, metadata generation, and script invocation. The posted PR/MR comment is the durable review audit artifact. Capture and report the PR/MR comment URL.
-
-**Step 4b — Spawn the recommenders in parallel.** Once the review comment is posted, spawn `acceptance-recommender` and `opt-in-recommender` simultaneously using the Agent tool, in a single response. Pass each recommender the full synthesizer output (with its `[F-N]` numbering intact). Keep their outputs in memory.
-
-Recommender failure rule: if either recommender fails or returns an error, treat its recommended list as empty and continue. The review comment was already posted in Step 4a, so it is not affected by recommender failure under any circumstance.
-
-**Step 4c — Post the recommendations comment.** Invoke `consensus-review-poster` with:
-
-- Comment type: `recommendations`
-- The acceptance-recommender's "Recommended for Acceptance" list (or empty if it failed)
-- The opt-in-recommender's "Opt-In Recommendations" list (or empty if it failed)
-- The PR/MR number
-- The cycle number: `CYCLE`
-- The repo dir, skill dir, and scratch directory as usual
-
-This comment is advisory only in interactive mode. In autonomous mode, it is the fixed input for automatic acceptance and low-confidence opt-in decisions in the current cycle. Report the recommendations comment URL alongside the review comment URL.
-
-### Step 5 — Acceptance (PR/MR number given)
-
-The acceptance step has two branches. Pick exactly one based on the `AUTONOMOUS` flag set during Mode detection.
-
-**Interactive branch (`AUTONOMOUS=false`):**
-
-Read the recommendations comment posted in Step 4c (or, equivalently, the in-memory acceptance-recommender output). If it lists one or more recommended-for-acceptance findings:
-
-1. Present the recommended-for-acceptance findings to the operator.
-2. Ask: "Accept these findings? (yes/no/select)"
-   - **yes** — accept all listed findings
-   - **no** — skip acceptance; proceed to Step 6
-   - **select** — operator specifies which findings to accept by number
-3. For accepted findings, invoke `consensus-review-poster` immediately with:
-   - Comment type: `acceptance`
-   - The selected findings with severity, title, file, and rationale
-   - Raw score and adjusted score
-   - PR/MR number
-   - Cycle number
-   - Repo dir, skill dir, and scratch directory as usual
-
-Do not write an `accepted-*.md` audit file. The posted acceptance comment is the durable record and future cycles recover it from the PR/MR thread.
-
-If the operator declines acceptance, no acceptance comment is posted.
-
-**Autonomous branch (`AUTONOMOUS=true`):**
-
-Do not prompt. If the acceptance-recommender produced one or more recommended-for-acceptance findings, post an `acceptance` comment for every finding it flagged — there is no operator filtering in autonomous mode. Invoke `consensus-review-poster` with:
-
-- Comment type: `acceptance`
-- The full acceptance-recommender list, including severity, title, file, and rationale
-- Raw score and adjusted score (from the acceptance-recommender output)
-- PR/MR number
-- Cycle number
-- Repo dir, skill dir, and scratch directory as usual
-
-If the acceptance-recommender returned "None." (or failed and was treated as empty in Step 4b), skip this step and proceed to Step 6 without posting an acceptance comment.
-
-### Step 6 — Route by score and optionally fix (PR/MR number required)
-
-Use the adjusted score after Step 5 acceptance when acceptance occurred; otherwise use the raw synthesizer score.
-
-**Interactive (`AUTONOMOUS=false`):**
-
-When the user asks to fix issues from the review, run the fix workflow defined in `references/fix-workflow.md`.
-
-**Autonomous (`AUTONOMOUS=true`):**
-
-The autonomous workflow runs unattended and owns the review/fix loop:
-
-1. If no PR/MR number was provided, emit `ABORT` with `details.reason="missing_pr_or_mr"` and stop. Local reviews do not have a durable audit trail and are not eligible for autonomous fixing.
-2. If score >= 95, stop successfully. No fix workflow is required.
-3. If 85 <= score < 95, run the fix workflow in **recommended-only** mode, then loop back to Step 0 for the next review cycle.
-4. If score < 85, run the fix workflow in **threshold** mode, targeting the 85 passing threshold, then loop back to Step 0 for the next review cycle.
-5. Before looping, check `MAX_AUTONOMOUS_CYCLES`. If the next review would exceed 5 cycles, emit `MAX_CYCLES_REACHED` and stop.
-
-The fix workflow covers: fix-start additional acceptance, low-confidence opt-in, fixer invocation, fixer signal handling, fix validation posting, code quality tooling, commit composition, and push to the PR branch.
-
-**Prerequisite:** the fix workflow is PR/MR-only. A PR or MR number must have been provided. The workflow resolves the latest review, fix-validation state, acceptances, and opt-ins from PR/MR comments and regenerates any needed scratch files. Local reviews do not have a durable audit trail and are not eligible for the fix workflow.
-
-## Exit signals
-
-In autonomous mode the skill cannot prompt for input, so it communicates terminal states by emitting a fenced `consensus-review-signal` block as the very last thing it writes before stopping. The block is a JSON object with this schema:
-
+````markdown
 ```consensus-review-signal
-{"signal": "<value>", "cycle": N, "details": {...}}
+{"signal": "<SIGNAL>", "cycle": <int>, "details": {}}
 ```
+````
 
-- `signal` is one of the values listed below.
-- `cycle` is the current cycle number as an integer (e.g. `1`, `3`).
-- `details` is a free-form JSON object with whatever context the caller will need to act on the signal. Keep keys short and lowercase.
+`cycle` is the PR/MR cycle number, or `0` for a local review. `details` carries
+exactly the keys listed below, all of them required. A value that does not exist
+at that point is `null`; a list with no entries is `[]`.
 
-Exit signal values:
+| Signal | When | `details` keys |
+| --- | --- | --- |
+| `REVIEW_COMPLETE` | A local review returned its report, or a PR/MR review reached `clean` | `score`, `status`, `review_url` |
+| `NO_DIFF` | Nothing to review | `scope` |
+| `EVIDENCE_FAILED` | A reviewer failed the evidence gate twice | `failed_passes` |
+| `QUALITY_FAILURES` | Quality commands still fail after the fix pass; nothing committed | `score`, `review_url`, `failed_commands` |
+| `BLOCKERS_REMAIN` | The fix cycle pushed, but findings remain `partial` or `work-item-required` and the budget allows no further review | `score`, `review_url`, `commit_shas`, `work_items` |
+| `PUSH_COMPLETE` | Fixes were committed and pushed, and the budget is exhausted before a `clean` review | `score`, `review_url`, `commit_shas`, `work_items` |
+| `MAX_REVIEWS_REACHED` | The third review is still not `clean` | `score`, `status`, `review_url`, `work_items` |
+| `ABORT` | An unrecoverable error | `reason`, `message`, `score`, `review_url` |
 
-- **`NO_DIFF`** — Step 1 Priority 5 found no local changes and `AUTONOMOUS=true`. The skill emits this signal instead of asking the operator for scope, then stops.
-- **`QUALITY_FAILURES`** — code-quality tooling failed during a fix workflow and the failures could not be resolved automatically. Use this signal to surface lint, format, type, or test failures that block the fix from being committed.
-- **`PUSH_COMPLETE`** — fixes were applied, validated, committed, and pushed successfully. The autonomous run completed its work for this cycle.
-- **`BLOCKERS_REMAIN`** — the fixer ran but at least one finding still has status `unresolved` or `partial` after fix validation. The cycle ends without a clean push.
-- **`MAX_CYCLES_REACHED`** — autonomous review/fix routing reached `MAX_AUTONOMOUS_CYCLES=5` and another pass would be required. Include the latest score, latest review URL when available, and remaining findings or blockers in `details`.
-- **`ABORT`** — an unrecoverable error prevented the workflow from continuing (for example, a missing dependency, an unauthenticated `gh`/`glab` client, or a malformed plan file). Include the failing step and a short error string in `details`.
+`ABORT` `reason` is one of `head_mismatch`, `branch_mismatch`, `platform_auth`,
+`post_failed`, `read_only_role_mutated`. `work_items` entries are the records
+the fixer wrote under `## Work Items Required`.
 
-The interactive path does not emit signal blocks. It returns text and prompts to the operator as before.
+## Stop rules
+
+- Stop after the signal block. Nothing follows it.
+- Never prompt the operator, at any point, for any reason.
+- Never invoke a skill, and never invoke an agent outside `v8ch`.
+- Never merge, deploy, force-push, or create tracking items.
