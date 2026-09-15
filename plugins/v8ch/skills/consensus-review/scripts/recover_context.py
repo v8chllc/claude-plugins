@@ -173,14 +173,46 @@ def extract_surviving_body(body: str) -> str:
     return stripped[content_start:end].strip() or stripped
 
 
-def run_json(command: list[str], repo_dir: str | Path) -> Any:
-    """Run a platform command that prints JSON and return the decoded payload."""
+def run_command(command: list[str], repo_dir: str | Path) -> str:
+    """Run a platform command and return its stdout, raising on a failure."""
     result = subprocess.run(command, cwd=repo_dir, capture_output=True, text=True)
     if result.returncode != 0:
         raise subprocess.CalledProcessError(
             result.returncode, command, result.stdout, result.stderr
         )
-    return json.loads(result.stdout or "null")
+    return result.stdout
+
+
+def decode_json_stream(payload: str) -> list[Any]:
+    """Decode one or more concatenated JSON values.
+
+    ``gh api --paginate`` and ``glab api --paginate`` emit one JSON array per
+    page, concatenated with no enclosing array. A plain ``json.loads`` raises on
+    the second page, so every review thread past the first page of comments
+    would fail to recover.
+    """
+    decoder = json.JSONDecoder()
+    values: list[Any] = []
+    text = payload.strip()
+    index = 0
+    while index < len(text):
+        value, offset = decoder.raw_decode(text, index)
+        values.append(value)
+        index = offset
+        while index < len(text) and text[index] in " \t\r\n":
+            index += 1
+    return values
+
+
+def flatten_comment_pages(payload: str) -> list[dict[str, Any]]:
+    """Flatten paginated JSON array pages into one comment list."""
+    comments: list[dict[str, Any]] = []
+    for page in decode_json_stream(payload):
+        if isinstance(page, list):
+            comments.extend(item for item in page if isinstance(item, dict))
+        elif isinstance(page, dict):
+            comments.append(page)
+    return comments
 
 
 def fetch_github_comments(
@@ -193,7 +225,7 @@ def fetch_github_comments(
     """
     if not GH:
         raise FileNotFoundError("gh executable not found in PATH")
-    payload = run_json(
+    payload = run_command(
         [
             GH,
             "api",
@@ -202,7 +234,7 @@ def fetch_github_comments(
         ],
         repo_dir,
     )
-    return payload if isinstance(payload, list) else []
+    return flatten_comment_pages(payload)
 
 
 def fetch_gitlab_comments(
@@ -211,7 +243,7 @@ def fetch_gitlab_comments(
     """Fetch GitLab MR notes through glab."""
     if not GLAB:
         raise FileNotFoundError("glab executable not found in PATH")
-    payload = run_json(
+    payload = run_command(
         [
             GLAB,
             "api",
@@ -220,7 +252,7 @@ def fetch_gitlab_comments(
         ],
         repo_dir,
     )
-    return payload if isinstance(payload, list) else []
+    return flatten_comment_pages(payload)
 
 
 def fetch_platform_comments(

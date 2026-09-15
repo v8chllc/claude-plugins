@@ -178,12 +178,13 @@ def test_report_must_not_nest_a_details_block() -> None:
         module.validate_report(report)
 
 
-def test_score_falls_back_to_the_report_heading() -> None:
+def test_score_comes_only_from_the_report_heading() -> None:
+    """No override exists: published metadata cannot contradict the report."""
     module = load_post_review_comment()
-    assert module.resolve_score(None, REPORT) == 91
-    assert module.resolve_score(70, REPORT) == 70
+    assert module.resolve_score(REPORT) == 91
     with pytest.raises(module.ContractError):
-        module.resolve_score(None, "### Evidence\n")
+        module.resolve_score("### Evidence\n")
+    assert "--score" not in module.build_parser().format_help()
 
 
 def test_comment_body_opens_with_exact_v2_metadata(tmp_path: Path) -> None:

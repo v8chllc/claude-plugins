@@ -110,15 +110,17 @@ def validate_report(report_text: str) -> None:
         )
 
 
-def resolve_score(score: int | None, report_text: str) -> int:
-    """Return the raw score from the flag or the report heading."""
-    if score is not None:
-        return score
+def resolve_score(report_text: str) -> int:
+    """Return the raw score from the report's Quality Score heading.
+
+    The heading is the only source. An override flag would let a caller publish
+    metadata that contradicts the visible report, and the synthesizer alone
+    decides the score.
+    """
     extracted = extract_quality_score(report_text)
     if extracted is None:
         raise ContractError(
-            "No raw score found. Provide --score or a '### Quality Score: N/100' "
-            "heading in the report."
+            "No raw score found. The report needs a '### Quality Score: N/100' heading."
         )
     return extracted
 
@@ -272,12 +274,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Review status decided by the synthesizer",
     )
     parser.add_argument(
-        "--score",
-        type=int,
-        default=None,
-        help="Raw score; read from the report heading when omitted",
-    )
-    parser.add_argument(
         "--delegation-mode",
         choices=["parallel-subagents", "sequential-fallback"],
         required=True,
@@ -324,7 +320,7 @@ def main(argv: list[str] | None = None) -> int:
             summary_text=summary_text,
             cycle=args.cycle,
             status=args.status,
-            score=resolve_score(args.score, report_text),
+            score=resolve_score(report_text),
             delegation_mode=args.delegation_mode,
             plan_source=args.plan_source,
             reviewed_sha=args.reviewed_sha,

@@ -299,12 +299,12 @@ def test_github_fetch_uses_the_paginated_issue_comments_api(
     monkeypatch.setattr(module, "GH", "/usr/bin/gh")
     captured: dict[str, Any] = {}
 
-    def fake_run(command: list[str], repo_dir: Any) -> Any:
+    def fake_run(command: list[str], repo_dir: Any) -> str:
         captured["command"] = command
         captured["repo_dir"] = repo_dir
-        return [{"body": "x"}]
+        return '[{"body": "x"}]'
 
-    monkeypatch.setattr(module, "run_json", fake_run)
+    monkeypatch.setattr(module, "run_command", fake_run)
     assert module.fetch_github_comments(7, "/repo") == [{"body": "x"}]
     assert captured["command"] == [
         "/usr/bin/gh",
@@ -322,11 +322,11 @@ def test_gitlab_fetch_uses_the_paginated_notes_api(
     monkeypatch.setattr(module, "GLAB", "/usr/bin/glab")
     captured: dict[str, Any] = {}
 
-    def fake_run(command: list[str], repo_dir: Any) -> Any:
+    def fake_run(command: list[str], repo_dir: Any) -> str:
         captured["command"] = command
-        return [{"note": "x"}]
+        return '[{"note": "x"}]'
 
-    monkeypatch.setattr(module, "run_json", fake_run)
+    monkeypatch.setattr(module, "run_command", fake_run)
     assert module.fetch_gitlab_comments(4, ".") == [{"note": "x"}]
     assert captured["command"] == [
         "/usr/bin/glab",
@@ -346,7 +346,9 @@ def test_fetch_requires_the_platform_client(monkeypatch: pytest.MonkeyPatch) -> 
         module.fetch_platform_comments(7, platform="gitlab")
 
 
-def test_run_json_raises_on_a_failed_command(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_command_raises_on_a_failed_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     module = load_recover_context()
 
     def fake(command: list[str], **kwargs: Any) -> Any:
@@ -354,7 +356,17 @@ def test_run_json_raises_on_a_failed_command(monkeypatch: pytest.MonkeyPatch) ->
 
     monkeypatch.setattr(module.subprocess, "run", fake)
     with pytest.raises(subprocess.CalledProcessError):
-        module.run_json(["gh"], ".")
+        module.run_command(["gh"], ".")
+
+
+def test_paginated_pages_decode_into_one_comment_list() -> None:
+    """``gh``/``glab`` --paginate emit one JSON array per page, concatenated."""
+    module = load_recover_context()
+    two_pages = '[{"body": "a"}]\n[{"body": "b"}]'
+    assert module.flatten_comment_pages(two_pages) == [{"body": "a"}, {"body": "b"}]
+    assert module.flatten_comment_pages('[{"body": "a"}]') == [{"body": "a"}]
+    assert module.flatten_comment_pages('[{"body": "a"}, 3, null]') == [{"body": "a"}]
+    assert module.flatten_comment_pages("") == []
 
 
 def test_load_comments_json_accepts_both_shapes(tmp_path: Path) -> None:

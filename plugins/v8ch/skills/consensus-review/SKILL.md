@@ -104,22 +104,40 @@ prompt. Agents do not receive skill variables.
    from the diff alone: the callers, the invariants the change relies on, and
    the failure paths it touches.
 
-3. **Run the three reviewers in one parallel batch.** Issue all three calls in a
+3. **Snapshot the working tree.** The reviewers and the synthesizer only read;
+   this is how that is enforced. Record both:
+
+   ```bash
+   git rev-parse HEAD
+   git status --porcelain=v1 --untracked-files=all
+   ```
+
+4. **Run the three reviewers in one parallel batch.** Issue all three calls in a
    single response. Give each one the diff, the changed-file context, the plan
    when supplied, `RECOVERED_CONTEXT` when it exists, and
    `${CLAUDE_SKILL_DIR}`.
 
-4. **Apply the evidence gate.** A reviewer output without an `## Evidence`
+5. **Apply the evidence gate.** A reviewer output without an `## Evidence`
    section carrying both `Files examined` and `Commands run` failed its pass.
    Rerun that reviewer once. On a second failure, emit `EVIDENCE_FAILED` with
    the failed pass names and stop, with no score.
 
-5. **Synthesize.** Invoke `v8ch:review-synthesizer` with all three outputs
+6. **Re-check the working tree.** Take the step 3 snapshot again and compare. On
+   any difference, emit `ABORT` with `reason` `read_only_role_mutated` and post
+   nothing.
+
+   The comparison covers new commits and changes to tracked and untracked paths
+   inside the repository. It does not cover ignored paths — reviewers run the
+   repository's lint, type, and test commands, which write caches there — nor
+   anything outside the repository. Those limits are why the roles are also told
+   not to write, rather than relying on this check alone.
+
+7. **Synthesize.** Invoke `v8ch:review-synthesizer` with all three outputs
    labeled in full, the delegation mode, the plan source, and
    `RECOVERED_CONTEXT`. It decides the score and the status; you do not
-   recompute either.
+   recompute either. Repeat step 6 afterwards.
 
-6. **Return or post.**
+8. **Return or post.**
    - **No PR/MR number:** return the report as-is, emit `REVIEW_COMPLETE` with
      `review_url` `null`, and stop. A local review never fixes.
    - **PR/MR number:** invoke `v8ch:consensus-review-poster` once with the
@@ -129,7 +147,7 @@ prompt. Agents do not receive skill variables.
      directory. Capture the comment URL. If posting fails, emit `ABORT` with
      `reason` `post_failed`.
 
-7. **Branch on the status.**
+9. **Branch on the status.**
    - `clean` — emit `REVIEW_COMPLETE` and stop.
    - `passing` or `failing` — run `references/fix-workflow.md`, then review
      again if the budget allows.
@@ -183,8 +201,8 @@ at that point is `null`; a list with no entries is `[]`.
 | `REVIEW_COMPLETE` | A local review returned its report, or a PR/MR review reached `clean` | `score`, `status`, `review_url` |
 | `NO_DIFF` | Nothing to review | `scope` |
 | `EVIDENCE_FAILED` | A reviewer failed the evidence gate twice | `failed_passes` |
-| `QUALITY_FAILURES` | Quality commands still fail after the fix pass; nothing committed | `score`, `review_url`, `failed_commands` |
-| `BLOCKERS_REMAIN` | The fix cycle pushed, but findings remain `partial` or `work-item-required` and the budget allows no further review | `score`, `review_url`, `commit_shas`, `work_items` |
+| `QUALITY_FAILURES` | Quality commands still fail after the fix pass; nothing is committed and the fixer's edits stay in the working tree | `score`, `review_url`, `failed_commands` |
+| `BLOCKERS_REMAIN` | The fix cycle pushed, but findings remain `partial` or `work-item-required` and the budget allows no further review, or the fixer returned a finding with no disposition | `score`, `review_url`, `commit_shas`, `work_items` |
 | `PUSH_COMPLETE` | Fixes were committed and pushed, and the budget is exhausted before a `clean` review | `score`, `review_url`, `commit_shas`, `work_items` |
 | `MAX_REVIEWS_REACHED` | The third review is still not `clean` | `score`, `status`, `review_url`, `work_items` |
 | `ABORT` | An unrecoverable error | `reason`, `message`, `score`, `review_url` |

@@ -1,8 +1,8 @@
 {
   "description": "sha256 per parity-tracked file, over content with any Python module docstring removed. Identical in claude-plugins and codex-plugins. Regenerate with tests/test_consensus_review_parity.py.",
   "files": {
-    "plugins/v8ch/skills/consensus-review/scripts/post_review_comment.py": "63d7322604dbf12a71452c1d1cb03a5236890c1ddcc90aca9acbc49d46c84fb7",
-    "plugins/v8ch/skills/consensus-review/scripts/recover_context.py": "71d19e5c1d7accaf45e65cfd07dd5832c3e1bc4f06413c0e9b2dd7f1899ecd4f",
+    "plugins/v8ch/skills/consensus-review/scripts/post_review_comment.py": "299eddca600fd098e5a49c2e77ab6c29f84cb28e43df28bbad9329c57e520ff6",
+    "plugins/v8ch/skills/consensus-review/scripts/recover_context.py": "87116f67f5924b12338f8069d39e053528094c26e5631beb4fca3c4f1bdd7f22",
     "plugins/v8ch/skills/consensus-review/scripts/review_contract.py": "63440247645dde1a03e4b3c6c4b86d1c1edec1f495d1b675372933525bbec7d8",
     "plugins/v8ch/skills/consensus-review/templates/review-comment.md.tmpl": "35e6b994766175ea96b5d6f69526facc77bdf05528b7b3d72f7822d7649400ae",
     "tests/fixtures/consensus-review/comments-github.json": "c353e5abedd5f410daadd0614c700627fc9e1523d11030479d7c120ac31b94a9",
