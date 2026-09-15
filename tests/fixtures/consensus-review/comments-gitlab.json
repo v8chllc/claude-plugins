@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "id": 201,
+      "note": "Pipeline is green.",
+      "created_at": "2026-09-11T08:00:00Z",
+      "author": {
+        "username": "maintainer"
+      }
+    },
+    {
+      "id": 202,
+      "note": "<!-- consensus-review\n{\"cycle\":2,\"delegation_mode\":\"parallel-subagents\",\"files_touched\":3,\"findings_closed\":1,\"findings_opened\":2,\"plan_source\":\"none\",\"reviewed_sha\":\"1a2b3c4\",\"schema_version\":2,\"scope_basis\":\"full-diff\",\"score\":91,\"status\":\"passing\",\"type\":\"review\"}\n-->\n\n### \ud83d\udfe1 Consensus Review \u2014 Cycle 02\n\n*Score: 91/100 (Passing).*\n*Delegation: parallel-subagents. Plan: none. Scope: full-diff. Reviewed: 1a2b3c4.*\n\n### Summary\n\n- Review passed with a score of 91/100. A fix cycle will address the open findings.\n\n<details>\n<summary>Evidence and full findings</summary>\n\n### Quality Score: 91/100 \u2014 Passing\n\n### Run Provenance\n\nDelegation: parallel-subagents. Plan: none.\n\n### Evidence\n\n- **Files examined:** CODING_STANDARDS.md, src/report/render.py, tests/test_render.py\n- **Commands run:** uv run ruff check ., uv run mypy .\n\n### Summary\n\n- One HIGH finding on the render path and one MEDIUM standards gap.\n\n### Must Fix\n\n#### [F-1] [HIGH] Empty row list renders a header with no body\n\n**Location:** src/report/render.py:48\n\n**Failure:** `render_summary([])` returns the header alone, so a caller writes a\nreport that looks complete and contains nothing.\n\n**Fix:** Return the explicit \"no rows\" placeholder the caller already handles.\n\n**Reviewers:** correctness-reviewer, architecture-reviewer\n\n### Should Fix\n\n#### [F-2] [MEDIUM] Public helper is missing its return type annotation\n\n**Location:** src/report/render.py:48\n\n**Failure:** `mypy .` reports a missing return annotation, and the package sets\n`disallow_untyped_defs = true`.\n\n**Fix:** Annotate as `def render_summary(rows: list[Row]) -> str:`.\n\n**Reviewers:** standards-reviewer\n\n### Latent Findings\n\nNone.\n\n### Plan Notes\n\nNone.\n\n### Behavior Deltas\n\n```behavior-deltas\ndeltas: none\nbasis: The change is limited to annotations and an early return already covered.\n```\n\n### Score Breakdown\n\n| Finding | Deduction |\n| --- | --- |\n| [F-1] HIGH | \u221210 |\n| [F-2] MEDIUM | \u22125 |\n| **Final score** | **85/100** |\n\n</details>\n",
+      "created_at": "2026-09-11T09:00:00Z",
+      "web_url": "https://gitlab.com/v8chllc/example/-/merge_requests/4#note_202",
+      "author": {
+        "username": "review-bot"
+      }
+    }
+  ]
+}

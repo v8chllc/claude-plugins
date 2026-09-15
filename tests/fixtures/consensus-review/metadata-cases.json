@@ -1,0 +1,128 @@
+{
+  "description": "Audit metadata schema cases (C-5). Byte-identical in claude-plugins and codex-plugins.",
+  "valid": {
+    "cycle": 1,
+    "delegation_mode": "parallel-subagents",
+    "files_touched": 0,
+    "findings_closed": 0,
+    "findings_opened": 0,
+    "plan_source": "none",
+    "reviewed_sha": "0000000",
+    "schema_version": 2,
+    "scope_basis": "full-diff",
+    "score": 100,
+    "status": "clean",
+    "type": "review"
+  },
+  "encoded": "{\"cycle\":1,\"delegation_mode\":\"parallel-subagents\",\"files_touched\":0,\"findings_closed\":0,\"findings_opened\":0,\"plan_source\":\"none\",\"reviewed_sha\":\"0000000\",\"schema_version\":2,\"scope_basis\":\"full-diff\",\"score\":100,\"status\":\"clean\",\"type\":\"review\"}",
+  "valid_variants": [
+    {
+      "name": "delta scope with a supplied plan and a full-length sha",
+      "overrides": {
+        "cycle": 4,
+        "delegation_mode": "sequential-fallback",
+        "files_touched": 12,
+        "findings_closed": 3,
+        "findings_opened": 5,
+        "plan_source": "supplied: .plan/2026-09-15-consensus-review.md",
+        "reviewed_sha": "9f3a25e3ca9bcd7a1b2c3d4e5f60718293a4b5c6",
+        "scope_basis": "delta-since:abc1234",
+        "score": 71,
+        "status": "failing"
+      }
+    },
+    {
+      "name": "passing status at the boundary score",
+      "overrides": {
+        "score": 85,
+        "status": "passing"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "schema version 1 is not a v2 payload",
+      "overrides": {"schema_version": 1}
+    },
+    {
+      "name": "a missing key breaks the exact key set",
+      "remove": ["findings_closed"]
+    },
+    {
+      "name": "an extra key breaks the exact key set",
+      "overrides": {"adjusted_score": 92}
+    },
+    {
+      "name": "type must be review",
+      "overrides": {"type": "fix_validation"}
+    },
+    {
+      "name": "cycle must be an integer",
+      "overrides": {"cycle": "01"}
+    },
+    {
+      "name": "cycle starts at one",
+      "overrides": {"cycle": 0}
+    },
+    {
+      "name": "cycle must not be a boolean",
+      "overrides": {"cycle": true}
+    },
+    {
+      "name": "score must be at least one",
+      "overrides": {"score": 0}
+    },
+    {
+      "name": "score must not exceed one hundred",
+      "overrides": {"score": 101}
+    },
+    {
+      "name": "status must come from the contract",
+      "overrides": {"status": "unknown"}
+    },
+    {
+      "name": "delegation mode must come from the contract",
+      "overrides": {"delegation_mode": "single-agent"}
+    },
+    {
+      "name": "plan source must not be empty",
+      "overrides": {"plan_source": ""}
+    },
+    {
+      "name": "a supplied plan source needs a source after the prefix",
+      "overrides": {"plan_source": "supplied: "}
+    },
+    {
+      "name": "an unprefixed plan source is rejected",
+      "overrides": {"plan_source": ".plan/feature.md"}
+    },
+    {
+      "name": "the reviewed sha must be lowercase hex",
+      "overrides": {"reviewed_sha": "ABC1234"}
+    },
+    {
+      "name": "the reviewed sha must be at least seven characters",
+      "overrides": {"reviewed_sha": "abc123"}
+    },
+    {
+      "name": "the reviewed sha must be at most forty characters",
+      "overrides": {"reviewed_sha": "9f3a25e3ca9bcd7a1b2c3d4e5f60718293a4b5c6d"}
+    },
+    {
+      "name": "the scope basis must come from the contract",
+      "overrides": {"scope_basis": "since:abc1234"}
+    },
+    {
+      "name": "a delta scope basis carries a valid sha",
+      "overrides": {"scope_basis": "delta-since:nothex"}
+    },
+    {
+      "name": "counts must not be negative",
+      "overrides": {"files_touched": -1}
+    },
+    {
+      "name": "counts must not be booleans",
+      "overrides": {"findings_opened": true}
+    }
+  ]
+}
