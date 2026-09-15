@@ -1,0 +1,94 @@
+{
+  "description": "Scoring contract cases (C-1). Byte-identical in claude-plugins and codex-plugins.",
+  "cases": [
+    {
+      "name": "no findings scores 100 and is clean",
+      "findings": [],
+      "expected_score": 100,
+      "expected_status": "clean"
+    },
+    {
+      "name": "plan notes deduct nothing and never block clean",
+      "findings": [
+        {"identifier": "P-1", "section": "plan-note", "severity": null},
+        {"identifier": "P-2", "section": "plan-note", "severity": null}
+      ],
+      "expected_score": 100,
+      "expected_status": "clean"
+    },
+    {
+      "name": "a single low should-fix blocks clean despite a 98 score",
+      "findings": [
+        {"identifier": "F-1", "section": "should-fix", "severity": "LOW"}
+      ],
+      "expected_score": 98,
+      "expected_status": "passing"
+    },
+    {
+      "name": "a low latent finding deducts but does not block clean",
+      "findings": [
+        {"identifier": "F-1", "section": "latent", "severity": "LOW"}
+      ],
+      "expected_score": 98,
+      "expected_status": "clean"
+    },
+    {
+      "name": "a high latent finding deducts at its would-be severity",
+      "findings": [
+        {"identifier": "F-1", "section": "latent", "severity": "HIGH"}
+      ],
+      "expected_score": 90,
+      "expected_status": "passing"
+    },
+    {
+      "name": "mixed must-fix and should-fix deduct once each",
+      "findings": [
+        {"identifier": "F-1", "section": "must-fix", "severity": "MEDIUM"},
+        {"identifier": "F-2", "section": "should-fix", "severity": "LOW"},
+        {"identifier": "P-1", "section": "plan-note", "severity": null}
+      ],
+      "expected_score": 93,
+      "expected_status": "passing"
+    },
+    {
+      "name": "one critical must-fix fails the review",
+      "findings": [
+        {"identifier": "F-1", "section": "must-fix", "severity": "CRITICAL"}
+      ],
+      "expected_score": 80,
+      "expected_status": "failing"
+    },
+    {
+      "name": "the boundary score of 85 still passes",
+      "findings": [
+        {"identifier": "F-1", "section": "must-fix", "severity": "HIGH"},
+        {"identifier": "F-2", "section": "should-fix", "severity": "MEDIUM"}
+      ],
+      "expected_score": 85,
+      "expected_status": "passing"
+    },
+    {
+      "name": "one point below the boundary fails",
+      "findings": [
+        {"identifier": "F-1", "section": "must-fix", "severity": "HIGH"},
+        {"identifier": "F-2", "section": "should-fix", "severity": "MEDIUM"},
+        {"identifier": "F-3", "section": "latent", "severity": "LOW"}
+      ],
+      "expected_score": 83,
+      "expected_status": "failing"
+    },
+    {
+      "name": "deductions floor at one",
+      "findings": [
+        {"identifier": "F-1", "section": "must-fix", "severity": "CRITICAL"},
+        {"identifier": "F-2", "section": "must-fix", "severity": "CRITICAL"},
+        {"identifier": "F-3", "section": "must-fix", "severity": "CRITICAL"},
+        {"identifier": "F-4", "section": "must-fix", "severity": "CRITICAL"},
+        {"identifier": "F-5", "section": "must-fix", "severity": "CRITICAL"},
+        {"identifier": "F-6", "section": "must-fix", "severity": "CRITICAL"}
+      ],
+      "expected_score": 1,
+      "expected_status": "failing"
+    }
+  ]
+}
