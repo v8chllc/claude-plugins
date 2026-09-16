@@ -44,7 +44,7 @@ Triggered by `/recommend curated`.
 7. For each recommendation include: action, type, subject, reason it is durable, proposed entry text using the template from `../remember/references/types.md`.
 8. Ask which to apply.
 9. Before writing approved entries, run
-   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude`.
+   `python "${CLAUDE_PLUGIN_ROOT}/skills/remember/scripts/validate_memory.py" --root . --toolchain claude`.
    If validation fails, report the issues and do not write unless the user
    explicitly confirms proceeding despite the malformed memory state.
 10. Apply each approved entry to its own target. `context` replaces the single
@@ -71,7 +71,7 @@ Triggered by `/recommend session`.
 6. Dedupe curated candidates against `.remember/MEMORY.md`; dedupe procedural candidates against their respective target files.
 7. Present recommendations grouped by target and action: `add`, `update`, `skip`. List unsupported procedural candidates separately with a note.
 8. Before applying approved changes, run
-   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude`.
+   `python "${CLAUDE_PLUGIN_ROOT}/skills/remember/scripts/validate_memory.py" --root . --toolchain claude`.
    If validation fails, report the issues and do not write unless the user
    explicitly confirms proceeding despite the malformed memory state.
 9. Apply only approved changes:
@@ -95,7 +95,7 @@ Triggered by `/recommend procedural`.
 6. Classify candidates as `add`, `update`, or `skip` against the file's current content.
 7. Propose a concise patch per target. Present for user review.
 8. Before applying approved changes, run
-   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude`.
+   `python "${CLAUDE_PLUGIN_ROOT}/skills/remember/scripts/validate_memory.py" --root . --toolchain claude`.
    If validation fails, report the issues and do not write unless the user
    explicitly confirms proceeding despite the malformed memory state.
 9. Apply only approved changes. Write only to files listed in `../remember/references/procedural-targets.md`.
