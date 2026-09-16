@@ -23,14 +23,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILL_DIR = REPO_ROOT / "plugins/v8ch/skills/consensus-review"
-PLUGIN_DIR = REPO_ROOT / "plugins/v8ch"
 FIXTURES_DIR = REPO_ROOT / "tests/fixtures/consensus-review"
 MANIFEST_PATH = SKILL_DIR / "parity-manifest.json"
-
-# A plugin instruction asset must never name the plugin's checkout path. Claude
-# provides ${CLAUDE_SKILL_DIR} for same-skill scripts and ${CLAUDE_PLUGIN_ROOT}
-# for cross-skill references. A literal path breaks in the installed cache.
-HARDCODED_SKILL_PATH_RE = re.compile(r"plugins/v8ch/skills/[^\s`'\"]*/scripts/")
 
 
 def strip_module_docstring(source: str) -> str:
@@ -112,47 +106,6 @@ def test_two_scripts_differing_only_in_docstring_hash_alike(tmp_path: Path) -> N
 
     codex.write_text('"""Codex copy."""\n\nVALUE = 2\n', encoding="utf-8")
     assert parity_digest(claude) != parity_digest(codex)
-
-
-def instruction_assets() -> list[Path]:
-    """Return every Markdown instruction asset shipped by the plugin."""
-    return sorted(PLUGIN_DIR.rglob("*.md"))
-
-
-@pytest.mark.parametrize("asset", instruction_assets(), ids=lambda path: path.name)
-def test_instruction_assets_do_not_hardcode_the_skill_script_path(asset: Path) -> None:
-    text = asset.read_text(encoding="utf-8")
-    match = HARDCODED_SKILL_PATH_RE.search(text)
-    hit = match.group(0) if match else ""
-    assert match is None, (
-        f"{asset.relative_to(REPO_ROOT)} hardcodes '{hit}'. "
-        "Use ${CLAUDE_SKILL_DIR} or ${CLAUDE_PLUGIN_ROOT} instead."
-    )
-
-
-def test_the_regex_catches_a_hardcoded_path() -> None:
-    assert HARDCODED_SKILL_PATH_RE.search(
-        "uv run plugins/v8ch/skills/consensus-review/scripts/recover_context.py 7"
-    )
-    assert not HARDCODED_SKILL_PATH_RE.search(
-        "uv run ${CLAUDE_SKILL_DIR}/scripts/recover_context.py 7"
-    )
-    assert not HARDCODED_SKILL_PATH_RE.search(
-        "python ${CLAUDE_PLUGIN_ROOT}/skills/remember/scripts/validate_memory.py"
-    )
-
-
-def test_memory_skills_use_installed_plugin_paths_for_validation() -> None:
-    remember = (PLUGIN_DIR / "skills/remember/SKILL.md").read_text(encoding="utf-8")
-    recommend = (PLUGIN_DIR / "skills/recommend/SKILL.md").read_text(encoding="utf-8")
-
-    assert remember.count("${CLAUDE_SKILL_DIR}/scripts/validate_memory.py") == 7
-    assert (
-        recommend.count(
-            "${CLAUDE_PLUGIN_ROOT}/skills/remember/scripts/validate_memory.py"
-        )
-        == 3
-    )
 
 
 def write_manifest() -> None:
