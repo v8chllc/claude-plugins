@@ -252,17 +252,18 @@ def test_comment_body_renders_the_template_without_placeholders() -> None:
 
 
 @pytest.mark.parametrize(
-    ("status", "icon"),
-    [("clean", "✅"), ("passing", "\U0001f7e1"), ("failing", "❌")],
+    ("status", "icon", "score"),
+    [("clean", "✅", 96), ("passing", "\U0001f7e1", 91), ("failing", "❌", 70)],
 )
-def test_status_icons(status: str, icon: str) -> None:
+def test_status_icons(status: str, icon: str, score: int) -> None:
+    """Each status renders its icon; the score must sit in that status's band."""
     module = load_post_review_comment()
     body = module.build_comment_body(
-        report_text=REPORT,
+        report_text=REPORT.replace("91/100", f"{score}/100"),
         summary_text=SUMMARY,
         cycle=1,
         status=status,
-        score=91,
+        score=score,
         delegation_mode="parallel-subagents",
         plan_source="none",
         reviewed_sha="1a2b3c4",
@@ -456,7 +457,7 @@ def test_the_script_still_renders_the_frozen_wire_format() -> None:
         summary_text=(FIXTURES_DIR / "review-summary.md").read_text(encoding="utf-8"),
         cycle=2,
         status="passing",
-        score=91,
+        score=85,
         delegation_mode="parallel-subagents",
         plan_source="none",
         reviewed_sha="1a2b3c4",
@@ -466,3 +467,35 @@ def test_the_script_still_renders_the_frozen_wire_format() -> None:
         findings_closed=1,
     )
     assert rendered == expected
+
+
+def test_a_closing_details_tag_is_rejected_too() -> None:
+    """Recovery cuts at the first `</details>`, so a bare closing tag truncates."""
+    module = load_post_review_comment()
+    with pytest.raises(module.ContractError, match="details"):
+        module.validate_report(REPORT + "\nA quoted `</details>` tag.\n")
+
+
+@pytest.mark.parametrize(
+    ("status", "score"),
+    [("clean", 60), ("clean", 94), ("passing", 60), ("failing", 91)],
+)
+def test_a_status_contradicting_the_score_is_refused(status: str, score: int) -> None:
+    """The comment shows one verdict and the metadata another; recovery routes
+    on the metadata, so the pair must agree before publication."""
+    module = load_post_review_comment()
+    with pytest.raises(module.ContractError):
+        module.build_comment_body(
+            report_text=REPORT.replace("91/100", f"{score}/100"),
+            summary_text=SUMMARY,
+            cycle=1,
+            status=status,
+            score=score,
+            delegation_mode="parallel-subagents",
+            plan_source="none",
+            reviewed_sha="1a2b3c4",
+            scope_basis="full-diff",
+            files_touched=1,
+            findings_opened=0,
+            findings_closed=0,
+        )

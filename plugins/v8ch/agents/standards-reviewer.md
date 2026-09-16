@@ -46,6 +46,12 @@ Discover the lint, format, and type commands from the manifests and steering
 documents you just read, then run them and quote the relevant output.
 
 - Run the commands the repository documents, not commands you assume exist.
+- Run every tool in check-only mode: `ruff format --check`, `black --check`,
+  `prettier --check`, and their equivalents. A formatter left in write mode
+  rewrites tracked files, and the orchestrator's working-tree comparison then
+  aborts the run before any reviewer reports.
+- The same applies to dependency installs: if one would rewrite a tracked
+  lockfile, do not run it. Mark the check unverified and say why.
 - On a branch that changes dependencies, install them first. If you cannot,
   mark that check unverified in the finding and say why.
 - Report a tool violation only when you have reproduced it. An unreproduced

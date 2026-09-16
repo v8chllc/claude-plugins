@@ -5,6 +5,12 @@ The scripts, templates, and fixtures are byte-identical to the Codex copy in
 toolchain. ``parity-manifest.json`` pins a hash per file over the
 docstring-stripped content, so an edit on one side fails here until the other
 side moves with it.
+
+This file proves local consistency only: it cannot see the sibling repository.
+The cross-repository comparison — both manifests, both fixture sets, and a
+comment rendered by one toolchain and recovered by the other — lives in the
+external seam suite, `tests/test_consensus_review_seam.py` in the workspace
+repository, which loads both checkouts and belongs to neither.
 """
 
 import ast
@@ -171,3 +177,37 @@ def write_manifest() -> None:
 
 if __name__ == "__main__":
     write_manifest()
+
+
+def test_the_fixture_report_scores_itself_consistently() -> None:
+    """The canonical report's heading, deductions, and final row must agree.
+
+    The fixture is what both repositories render from and what the frozen wire
+    format is built on, so a heading that contradicts its own breakdown teaches
+    every reader the wrong arithmetic. It shipped that way once: a 91/100
+    heading over deductions totalling 15.
+    """
+    report = (FIXTURES_DIR / "review-report.md").read_text(encoding="utf-8")
+
+    heading = re.search(r"^### Quality Score: (\d+)/100", report, re.MULTILINE)
+    assert heading, "the fixture report has no Quality Score heading"
+
+    deductions = [int(value) for value in re.findall(r"\|\s*[−-](\d+)\s*\|", report)]
+    final = re.search(r"\*\*Final score\*\*\s*\|\s*\*\*(\d+)/100\*\*", report)
+    assert deductions, "the fixture report has no deduction rows"
+    assert final, "the fixture report has no final score row"
+
+    assert int(heading.group(1)) == int(final.group(1)) == 100 - sum(deductions)
+
+
+def test_the_frozen_comment_carries_the_fixture_score() -> None:
+    """Metadata, rendered score line, and report heading are one number."""
+    comment = (FIXTURES_DIR / "review-comment-v2.md").read_text(encoding="utf-8")
+    report = (FIXTURES_DIR / "review-report.md").read_text(encoding="utf-8")
+    expected = re.search(r"^### Quality Score: (\d+)/100", report, re.MULTILINE)
+    assert expected
+    score = int(expected.group(1))
+
+    metadata = json.loads(comment.split("\n")[1])
+    assert metadata["score"] == score
+    assert f"*Score: {score}/100" in comment

@@ -84,6 +84,14 @@ If a quality command still fails and you cannot resolve it, stop before the
 commit, record the failing commands, and report `QUALITY_FAILURES`. Nothing is
 committed in that case.
 
+Every applied repair needs a confirmed mutation check: a finding you marked
+`fixed`, or `partial` where code changed. If a check cannot be confirmed, record
+it as `not confirmed` and report `MUTATION_UNPROVEN` with those finding IDs.
+Nothing is committed then either. The commit body exists to carry fix evidence,
+so a repair whose check never failed without it would record a claim nothing
+tested. A `declined` or `work-item-required` finding applies no repair and needs
+no mutation check.
+
 ## Step 4 — Work items
 
 The skill never creates tracking items. For each `work-item-required` defect,
