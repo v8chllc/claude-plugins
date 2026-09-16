@@ -32,9 +32,23 @@ EXPECTED_PROFILE = {
     "synchronized_with": "v8chllc/codex-plugins",
 }
 SETUP_COMMANDS = {"npm ci", "uv sync"}
-DOCUMENTED_COMMAND_SECTIONS = [
-    ("README.md", "## Development"),
-    ("CODING_STANDARDS.md", "## Quality Checks"),
+DOCUMENTED_COMMAND_BLOCKS = [
+    (
+        "README.md",
+        "## Development",
+        (
+            "Install the repository-managed dependencies before running checks:",
+            "Run the quality suite:",
+        ),
+    ),
+    (
+        "CODING_STANDARDS.md",
+        "## Quality Checks",
+        (
+            "Install the repository-managed dependencies:",
+            "Run the same checks used by CI before pushing:",
+        ),
+    ),
 ]
 
 
@@ -78,28 +92,31 @@ def assert_quality_commands_in_ci(
     )
 
 
-def shell_commands(text: str) -> set[str]:
-    blocks = re.findall(r"```(?:sh|bash)\n(.*?)\n```", text, flags=re.DOTALL)
-    return {
-        line.strip()
-        for block in blocks
-        for line in block.splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    }
-
-
-def markdown_section(text: str, heading: str) -> str:
+def command_block_after(text: str, label: str) -> str:
     match = re.search(
-        rf"^{re.escape(heading)}\n(?P<body>.*?)(?=^## |\Z)",
+        rf"^{re.escape(label)}\n\n```(?:sh|bash)\n(?P<commands>.*?)\n```",
         text,
         flags=re.DOTALL | re.MULTILINE,
     )
-    assert match is not None, f"documented command section is missing: {heading}"
-    return match.group("body")
+    assert match is not None, f"documented command block is missing after: {label}"
+    return match.group("commands")
 
 
-def assert_documented_commands(text: str, heading: str, expected: set[str]) -> None:
-    assert shell_commands(markdown_section(text, heading)) == expected
+def assert_documented_commands(
+    text: str, block_labels: tuple[str, str], expected: set[str]
+) -> None:
+    actual = {
+        line.strip()
+        for label in block_labels
+        for line in command_block_after(text, label).splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    missing = sorted(expected - actual)
+    unexpected = sorted(actual - expected)
+    if actual != expected:
+        raise AssertionError(
+            f"documented commands differ; missing: {missing}; unexpected: {unexpected}"
+        )
 
 
 def test_agent_workflow_profile_is_exact() -> None:
@@ -109,24 +126,48 @@ def test_agent_workflow_profile_is_exact() -> None:
     assert profile == EXPECTED_PROFILE
 
 
-@pytest.mark.parametrize(("document", "heading"), DOCUMENTED_COMMAND_SECTIONS)
-def test_documented_commands_match_profile(document: str, heading: str) -> None:
+@pytest.mark.parametrize(
+    ("document", "section_heading", "block_labels"), DOCUMENTED_COMMAND_BLOCKS
+)
+def test_documented_commands_match_profile(
+    document: str, section_heading: str, block_labels: tuple[str, str]
+) -> None:
     profile = load_profile((ROOT / "AGENTS.md").read_text())
     expected = SETUP_COMMANDS | set(profile_quality_commands(profile))
 
-    assert_documented_commands((ROOT / document).read_text(), heading, expected)
+    assert section_heading in (ROOT / document).read_text()
+    assert_documented_commands((ROOT / document).read_text(), block_labels, expected)
 
 
-@pytest.mark.parametrize(("document", "heading"), DOCUMENTED_COMMAND_SECTIONS)
+@pytest.mark.parametrize(
+    ("document", "section_heading", "block_labels"), DOCUMENTED_COMMAND_BLOCKS
+)
 def test_documented_command_check_ignores_unrelated_shell_examples(
-    document: str, heading: str
+    document: str, section_heading: str, block_labels: tuple[str, str]
 ) -> None:
     profile = load_profile((ROOT / "AGENTS.md").read_text())
     expected = SETUP_COMMANDS | set(profile_quality_commands(profile))
     text = (ROOT / document).read_text()
-    text += "\n## Unrelated Example\n\n```sh\necho unrelated\n```\n"
+    nested_example = "\n\n### Unrelated Example\n\n```sh\necho unrelated\n```"
+    text = text.replace(section_heading, section_heading + nested_example, 1)
 
-    assert_documented_commands(text, heading, expected)
+    assert_documented_commands(text, block_labels, expected)
+
+
+@pytest.mark.parametrize(
+    ("document", "section_heading", "block_labels"), DOCUMENTED_COMMAND_BLOCKS
+)
+def test_documented_command_check_rejects_extra_quality_commands(
+    document: str, section_heading: str, block_labels: tuple[str, str]
+) -> None:
+    profile = load_profile((ROOT / "AGENTS.md").read_text())
+    expected = SETUP_COMMANDS | set(profile_quality_commands(profile))
+    text = (ROOT / document).read_text()
+    assert section_heading in text
+    text = text.replace("uv run pytest\n```", "uv run pytest\npytest\n```", 1)
+
+    with pytest.raises(AssertionError, match=r"unexpected: \['pytest'\]"):
+        assert_documented_commands(text, block_labels, expected)
 
 
 def test_profile_quality_commands_are_in_ci() -> None:
