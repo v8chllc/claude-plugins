@@ -32,6 +32,10 @@ EXPECTED_PROFILE = {
     "synchronized_with": "v8chllc/codex-plugins",
 }
 SETUP_COMMANDS = {"npm ci", "uv sync"}
+DOCUMENTED_COMMAND_SECTIONS = [
+    ("README.md", "## Development"),
+    ("CODING_STANDARDS.md", "## Quality Checks"),
+]
 
 
 def load_profile(text: str) -> dict[str, object]:
@@ -84,6 +88,20 @@ def shell_commands(text: str) -> set[str]:
     }
 
 
+def markdown_section(text: str, heading: str) -> str:
+    match = re.search(
+        rf"^{re.escape(heading)}\n(?P<body>.*?)(?=^## |\Z)",
+        text,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    assert match is not None, f"documented command section is missing: {heading}"
+    return match.group("body")
+
+
+def assert_documented_commands(text: str, heading: str, expected: set[str]) -> None:
+    assert shell_commands(markdown_section(text, heading)) == expected
+
+
 def test_agent_workflow_profile_is_exact() -> None:
     profile = load_profile((ROOT / "AGENTS.md").read_text())
 
@@ -91,12 +109,24 @@ def test_agent_workflow_profile_is_exact() -> None:
     assert profile == EXPECTED_PROFILE
 
 
-@pytest.mark.parametrize("document", ["README.md", "CODING_STANDARDS.md"])
-def test_documented_commands_match_profile(document: str) -> None:
+@pytest.mark.parametrize(("document", "heading"), DOCUMENTED_COMMAND_SECTIONS)
+def test_documented_commands_match_profile(document: str, heading: str) -> None:
     profile = load_profile((ROOT / "AGENTS.md").read_text())
     expected = SETUP_COMMANDS | set(profile_quality_commands(profile))
 
-    assert shell_commands((ROOT / document).read_text()) == expected
+    assert_documented_commands((ROOT / document).read_text(), heading, expected)
+
+
+@pytest.mark.parametrize(("document", "heading"), DOCUMENTED_COMMAND_SECTIONS)
+def test_documented_command_check_ignores_unrelated_shell_examples(
+    document: str, heading: str
+) -> None:
+    profile = load_profile((ROOT / "AGENTS.md").read_text())
+    expected = SETUP_COMMANDS | set(profile_quality_commands(profile))
+    text = (ROOT / document).read_text()
+    text += "\n## Unrelated Example\n\n```sh\necho unrelated\n```\n"
+
+    assert_documented_commands(text, heading, expected)
 
 
 def test_profile_quality_commands_are_in_ci() -> None:
