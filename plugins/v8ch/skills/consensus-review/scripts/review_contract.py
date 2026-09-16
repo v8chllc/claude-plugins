@@ -77,6 +77,8 @@ METADATA_KEYS: frozenset[str] = frozenset(
 )
 COUNT_KEYS: tuple[str, ...] = ("files_touched", "findings_opened", "findings_closed")
 
+_WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
+
 SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 QUALITY_SCORE_RE = re.compile(r"^### Quality Score:\s*(\d+)/100\b", re.MULTILINE)
 METADATA_BLOCK_RE = re.compile(
@@ -187,12 +189,25 @@ def _require_sha(value: object, *, key: str) -> str:
 
 
 def validate_plan_source(value: object) -> str:
-    """Validate the plan-source value shared by the report and the metadata."""
+    """Validate the plan-source value shared by the report and the metadata.
+
+    The value is published twice, in the Run Provenance line and in the metadata
+    block, and read by people with no checkout of the machine that produced it.
+    A path that resolves only there is refused for the same reason findings may
+    not cite one.
+    """
     if not isinstance(value, str) or not value:
         raise ContractError("Metadata 'plan_source' must be a non-empty string.")
     if value == NO_PLAN_SOURCE:
         return value
     if value.startswith(SUPPLIED_PLAN_PREFIX) and value[len(SUPPLIED_PLAN_PREFIX) :]:
+        suffix = value[len(SUPPLIED_PLAN_PREFIX) :].strip()
+        if suffix.startswith(("/", "~")) or _WINDOWS_DRIVE_RE.match(suffix):
+            raise ContractError(
+                "Metadata 'plan_source' must not publish an absolute or "
+                f"home-directory path, got {suffix!r}. Cite the plan by its "
+                "repository-relative path or by a short description."
+            )
         return value
     raise ContractError(
         "Metadata 'plan_source' must be 'none' or "
@@ -254,12 +269,39 @@ def validate_metadata(payload: object) -> dict[str, Any]:
             "Metadata 'delegation_mode' must be one of "
             f"{', '.join(DELEGATION_MODES)}, got {payload['delegation_mode']!r}."
         )
+    validate_status_band(payload["status"], payload["score"])
     validate_plan_source(payload["plan_source"])
     _require_sha(payload["reviewed_sha"], key="reviewed_sha")
     validate_scope_basis(payload["scope_basis"])
     for key in COUNT_KEYS:
         _require_int(payload[key], key=key, minimum=0, maximum=None)
     return payload
+
+
+def validate_status_band(status: str, score: int) -> None:
+    """Reject a status the score cannot support.
+
+    ``review_status`` also consults the finding set, which metadata does not
+    carry, so only the score bands are checkable here: below the passing
+    threshold the status is always ``failing``, at or above it never is, and
+    ``clean`` additionally needs the clean threshold. Without this, a caller can
+    publish ``clean`` over a report headed 60/100 — the comment would show one
+    verdict, the metadata another, and recovery would route on the metadata.
+    """
+    if score < PASSING_MIN_SCORE and status != STATUS_FAILING:
+        raise ContractError(
+            f"A score below {PASSING_MIN_SCORE} is '{STATUS_FAILING}', got "
+            f"status {status!r} with score {score}."
+        )
+    if score >= PASSING_MIN_SCORE and status == STATUS_FAILING:
+        raise ContractError(
+            f"Status '{STATUS_FAILING}' contradicts a score of {score}."
+        )
+    if status == STATUS_CLEAN and score < CLEAN_MIN_SCORE:
+        raise ContractError(
+            f"Status '{STATUS_CLEAN}' needs a score of at least "
+            f"{CLEAN_MIN_SCORE}, got {score}."
+        )
 
 
 def build_metadata(

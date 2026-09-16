@@ -234,3 +234,43 @@ def test_plan_source_and_scope_basis_helpers() -> None:
         contract.validate_plan_source(None)
     with pytest.raises(contract.ContractError):
         contract.validate_scope_basis(7)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "supplied: /Users/someone/plan.md",
+        "supplied: ~/plans/feature.md",
+        "supplied: /tmp/plan.md",
+        "supplied: C:\\plans\\feature.md",
+    ],
+)
+def test_an_absolute_or_home_plan_path_is_refused(value: str) -> None:
+    """plan_source is published twice and read without this checkout."""
+    with pytest.raises(contract.ContractError, match="absolute or"):
+        contract.validate_plan_source(value)
+
+
+def test_a_repository_relative_plan_path_is_accepted() -> None:
+    assert contract.validate_plan_source("supplied: .plan/feature.md")
+    assert contract.validate_plan_source("supplied: the linked issue body")
+    assert contract.validate_plan_source("none") == "none"
+
+
+@pytest.mark.parametrize(
+    ("status", "score", "ok"),
+    [
+        ("failing", 84, True),
+        ("passing", 85, True),
+        ("clean", 95, True),
+        ("clean", 94, False),
+        ("passing", 84, False),
+        ("failing", 85, False),
+    ],
+)
+def test_the_status_band_follows_the_score(status: str, score: int, ok: bool) -> None:
+    if ok:
+        contract.validate_status_band(status, score)
+        return
+    with pytest.raises(contract.ContractError):
+        contract.validate_status_band(status, score)

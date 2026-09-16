@@ -1,20 +1,20 @@
 <!-- consensus-review
-{"cycle":2,"delegation_mode":"parallel-subagents","files_touched":3,"findings_closed":1,"findings_opened":2,"plan_source":"none","reviewed_sha":"1a2b3c4","schema_version":2,"scope_basis":"full-diff","score":91,"status":"passing","type":"review"}
+{"cycle":2,"delegation_mode":"parallel-subagents","files_touched":3,"findings_closed":1,"findings_opened":2,"plan_source":"none","reviewed_sha":"1a2b3c4","schema_version":2,"scope_basis":"full-diff","score":85,"status":"passing","type":"review"}
 -->
 
 ### 🟡 Consensus Review — Cycle 02
 
-*Score: 91/100 (Passing).*
+*Score: 85/100 (Passing).*
 *Delegation: parallel-subagents. Plan: none. Scope: full-diff. Reviewed: 1a2b3c4.*
 
 ### Summary
 
-- Review passed with a score of 91/100. A fix cycle will address the open findings.
+- Review passed with a score of 85/100. A fix cycle will address the open findings.
 
 <details>
 <summary>Evidence and full findings</summary>
 
-### Quality Score: 91/100 — Passing
+### Quality Score: 85/100 — Passing
 
 ### Run Provenance
 

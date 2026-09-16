@@ -103,10 +103,12 @@ def validate_report(report_text: str) -> None:
             "The report is missing its merged '### Evidence' section; the "
             "synthesizer did not complete."
         )
-    if "<details>" in report_text.lower():
+    lowered = report_text.lower()
+    if "<details>" in lowered or "</details>" in lowered:
         raise ContractError(
-            "The report contains a <details> block. The comment wraps the report "
-            "in one <details> element, and a nested block truncates recovery."
+            "The report contains a <details> or </details> tag. The comment wraps "
+            "the report in one <details> element, and recovery cuts at the first "
+            "closing tag, so either one truncates the recovered report."
         )
 
 

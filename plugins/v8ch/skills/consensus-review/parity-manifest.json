@@ -1,16 +1,16 @@
 {
   "description": "sha256 per parity-tracked file, over content with any Python module docstring removed. Identical in claude-plugins and codex-plugins. Regenerate with tests/test_consensus_review_parity.py.",
   "files": {
-    "plugins/v8ch/skills/consensus-review/scripts/post_review_comment.py": "299eddca600fd098e5a49c2e77ab6c29f84cb28e43df28bbad9329c57e520ff6",
+    "plugins/v8ch/skills/consensus-review/scripts/post_review_comment.py": "ebcd0ec04a341cb3b6d8ece2be5d8329575373e301b131851cceb82c9a46879e",
     "plugins/v8ch/skills/consensus-review/scripts/recover_context.py": "87116f67f5924b12338f8069d39e053528094c26e5631beb4fca3c4f1bdd7f22",
-    "plugins/v8ch/skills/consensus-review/scripts/review_contract.py": "63440247645dde1a03e4b3c6c4b86d1c1edec1f495d1b675372933525bbec7d8",
+    "plugins/v8ch/skills/consensus-review/scripts/review_contract.py": "31a173ffdc1ba2bed66f8fae32f814fb2df8f8f7746cf174667eb5b63f7068a3",
     "plugins/v8ch/skills/consensus-review/templates/review-comment.md.tmpl": "35e6b994766175ea96b5d6f69526facc77bdf05528b7b3d72f7822d7649400ae",
-    "tests/fixtures/consensus-review/comments-github.json": "c353e5abedd5f410daadd0614c700627fc9e1523d11030479d7c120ac31b94a9",
-    "tests/fixtures/consensus-review/comments-gitlab.json": "62a34dece38e3ecd0f6d806d569f4fd2fd60ccf90d42f915465735bd22d6ff14",
+    "tests/fixtures/consensus-review/comments-github.json": "0ace68051c0670b371cb34031e9eed358b99c40a67f12c1d42bd365ab2573875",
+    "tests/fixtures/consensus-review/comments-gitlab.json": "e0eb34db81cdba1cf2730f9c9475af2ff8fa5110144ea8cef9f3cf5a33ac19a2",
     "tests/fixtures/consensus-review/metadata-cases.json": "0c3442351c24aae83a432f5d77e40d65b6afb635b8b372ae0e19f62157c2f878",
-    "tests/fixtures/consensus-review/review-comment-v2.md": "816a83a035dc91350f8fe2e3e505970f59a6a35973ba07f901ac5a05c4d86c9c",
-    "tests/fixtures/consensus-review/review-report.md": "e656431278a20d3a074516bc8b91fab2d17d83a8c2e34d85d798542c975bd485",
-    "tests/fixtures/consensus-review/review-summary.md": "09e83d054ae7c10b5a59334d75d5afaede7738477999abce6d351ac0ee1d09da",
+    "tests/fixtures/consensus-review/review-comment-v2.md": "c0a575e1a140b1d26605e3b6b1f244b1a681bd4f2a66eaf1680fea67cebfc982",
+    "tests/fixtures/consensus-review/review-report.md": "486a6a89eb788f4a00553500cf897bbc9cdefcf18508bdca36ece7d34e0a87a1",
+    "tests/fixtures/consensus-review/review-summary.md": "a0fada32394850844d1a0e9618e6c3c6f25c66323381a1007bea27eddfe5e124",
     "tests/fixtures/consensus-review/scoring-cases.json": "c23d1abcbe040a86e438050a2434c8089f15daea113444d1b0d04775c6637d1c"
   }
 }

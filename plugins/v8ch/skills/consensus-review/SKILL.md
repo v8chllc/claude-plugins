@@ -8,7 +8,8 @@ description: Runs an autonomous, evidence-gated consensus code review. Use when 
 Three reviewers examine the change independently, a synthesizer ranks their
 findings by consequence and scores the result, and — on a PR or MR — one comment
 per cycle records it. That comment thread is the audit trail: later cycles
-recover it, and it is the only durable artifact this skill writes.
+recover it, and it is the only durable *comment* this skill writes. A fix cycle
+also writes a commit, whose body carries the fix evidence.
 
 The run is always autonomous. There are no operator prompts and no interactive
 branches. It ends with exactly one terminal signal.
@@ -150,7 +151,9 @@ prompt. Agents do not receive skill variables.
 9. **Branch on the status.**
    - `clean` — emit `REVIEW_COMPLETE` and stop.
    - `passing` or `failing` — run `references/fix-workflow.md`, then review
-     again if the budget allows.
+     again if the budget allows. That workflow returns an outcome; this skill
+     emits the signal, following the precedence list in its Step 5 so two
+     identical runs cannot end on different signals.
 
 ## Budget
 
@@ -158,7 +161,11 @@ At most three reviews per invocation. Every invocation gets a fresh budget,
 whatever the PR/MR's cycle count and whichever toolchain wrote the earlier
 cycles. Cycle numbers themselves accumulate with no cap.
 
-When the third review is still not `clean`, emit `MAX_REVIEWS_REACHED` and stop.
+When the third review is still not `clean`, the run ends on the first matching
+signal in the fix workflow's Step 5 precedence list. In short: unresolved
+findings give `BLOCKERS_REMAIN`, a pushed third-cycle fix gives `PUSH_COMPLETE`,
+and a third review that produced no commit gives `MAX_REVIEWS_REACHED`. Without
+that order, one run could end on either signal.
 
 ## Plan handling
 
@@ -207,7 +214,7 @@ at that point is `null`; a list with no entries is `[]`.
 | `MAX_REVIEWS_REACHED` | The third review is still not `clean` | `score`, `status`, `review_url`, `work_items` |
 | `ABORT` | An unrecoverable error | `reason`, `message`, `score`, `review_url` |
 
-`ABORT` `reason` is one of `head_mismatch`, `branch_mismatch`, `platform_auth`,
+`ABORT` `reason` is one of `command_failed`, `head_mismatch`, `branch_mismatch`, `platform_auth`,
 `post_failed`, `read_only_role_mutated`. `work_items` entries are the records
 the fixer wrote under `## Work Items Required`.
 

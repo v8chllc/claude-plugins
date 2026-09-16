@@ -60,8 +60,8 @@ Write the report verbatim to `{scratch-dir}/review-{cycle:02d}.md`, then run:
 ```bash
 uv run <skill-dir>/scripts/post_review_comment.py \
   --pr-number <number> \
-  --review-file <scratch-dir>/review-<cycle>.md \
-  --summary-file <scratch-dir>/summary-<cycle>.md \
+  --review-file <scratch-dir>/review-<cycle:02d>.md \
+  --summary-file <scratch-dir>/summary-<cycle:02d>.md \
   --repo-dir <repo-dir> \
   --cycle <cycle> \
   --status <clean|passing|failing> \
