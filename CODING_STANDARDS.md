@@ -26,13 +26,20 @@ directories for file-system behavior.
 
 ## Quality Checks
 
+Install the repository-managed dependencies:
+
+```sh
+npm ci
+uv sync
+```
+
 Run the same checks used by CI before pushing:
 
 ```sh
 npm run lint:md
-black --check .
-ruff check .
-ruff format --check .
-mypy
-pytest
+uv run black --check .
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy
+uv run pytest
 ```

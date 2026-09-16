@@ -12,21 +12,22 @@ Plugin, skill, and agent assets for Claude/Codex workflows.
 
 ## Development
 
-Install Node dependencies before running Markdown checks:
+Install the repository-managed dependencies before running checks:
 
 ```sh
 npm ci
-npm run lint:md
+uv sync
 ```
 
-Python quality tools are configured in `pyproject.toml`:
+Run the quality suite:
 
 ```sh
-black --check .
-ruff check .
-ruff format --check .
-mypy
-pytest
+npm run lint:md
+uv run black --check .
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy
+uv run pytest
 ```
 
 GitHub Actions runs these checks on each push. See `CODING_STANDARDS.md` for code style and testing expectations.
