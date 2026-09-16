@@ -172,12 +172,12 @@ Triggered by `/remember setup` or natural language setup phrases.
 9. Confirm to the user with a summary of files created, existing files reused,
    directive cleanup performed, context migrated, and any manual review needed.
 10. Run validation and steering detection from the repository root:
-   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude --check-steering`.
+   `python "${CLAUDE_SKILL_DIR}/scripts/validate_memory.py" --root . --toolchain claude --check-steering`.
    Report the validation status and issues. Validation must not mutate files.
 11. If `CLAUDE.md` is missing a `## Memory Fast-Track Workflow` section, report
    the gap and ask whether to append generated Claude-appropriate guidance.
    Apply it only after user approval with:
-   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude --apply-fast-track`.
+   `python "${CLAUDE_SKILL_DIR}/scripts/validate_memory.py" --root . --toolchain claude --apply-fast-track`.
    If `CLAUDE.md` has related but non-matching fast-track guidance, avoid
    destructive edits and ask for manual review or explicit approval.
 
@@ -379,7 +379,7 @@ Invoked by the `recommend` skill (`/recommend curated`).
 7. For each recommendation include: action, type, subject, reason it is durable, proposed entry text using the template from `references/types.md`.
 8. Ask which to apply. On approval, continue through Workflow C from duplicate check.
 9. Before writing approved entries, run validation:
-   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude`.
+   `python "${CLAUDE_SKILL_DIR}/scripts/validate_memory.py" --root . --toolchain claude`.
    If validation fails, report the issues and do not write unless the user
    explicitly confirms proceeding despite the malformed memory state.
 
@@ -399,7 +399,7 @@ Invoked by the `recommend` skill (`/recommend session`).
 7. Present recommendations grouped by target and action: `add`, `update`, `skip`. List unsupported procedural candidates separately with a note.
 8. Apply only approved changes. For curated approvals, continue through Workflow C. For procedural approvals, continue through Workflow I.
 9. Before applying approved curated or procedural changes, run validation:
-   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude`.
+   `python "${CLAUDE_SKILL_DIR}/scripts/validate_memory.py" --root . --toolchain claude`.
    If validation fails, report the issues and do not write unless the user
    explicitly confirms proceeding despite the malformed memory state.
 
@@ -419,7 +419,7 @@ Invoked by the `recommend` skill (`/recommend procedural`).
 7. Propose a concise patch per target. Present for user review.
 8. Apply only approved changes (Workflow I).
 9. Before applying approved procedural changes, run validation:
-   `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude`.
+   `python "${CLAUDE_SKILL_DIR}/scripts/validate_memory.py" --root . --toolchain claude`.
    If validation fails, report the issues and do not write unless the user
    explicitly confirms proceeding despite the malformed memory state.
 
@@ -472,8 +472,8 @@ Triggered by `/remember validate`, `/remember validate --json`, "validate
 remember", or "validate memory".
 
 1. Run `scripts/validate_memory.py` from the repository root:
-   - Human-readable: `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude --check-steering`
-   - JSON: `python plugins/v8ch/skills/remember/scripts/validate_memory.py --root . --toolchain claude --check-steering --json`
+   - Human-readable: `python "${CLAUDE_SKILL_DIR}/scripts/validate_memory.py" --root . --toolchain claude --check-steering`
+   - JSON: `python "${CLAUDE_SKILL_DIR}/scripts/validate_memory.py" --root . --toolchain claude --check-steering --json`
 2. Validation checks `.remember/MEMORY.md` for required type sections, known
    entry markers, and required fields. A `<!-- context -->` entry there is an
    error (`context_entry_in_memory_file`); a leftover `## context` heading is a

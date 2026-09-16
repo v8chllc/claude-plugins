@@ -23,23 +23,14 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILL_DIR = REPO_ROOT / "plugins/v8ch/skills/consensus-review"
-AGENTS_DIR = REPO_ROOT / "plugins/v8ch/agents"
+PLUGIN_DIR = REPO_ROOT / "plugins/v8ch"
 FIXTURES_DIR = REPO_ROOT / "tests/fixtures/consensus-review"
 MANIFEST_PATH = SKILL_DIR / "parity-manifest.json"
 
-# A skill or role asset must never name the plugin's own install path: the
-# orchestrator passes ${CLAUDE_SKILL_DIR}, and the Codex copy resolves the path
-# relative to SKILL.md. A literal path breaks whenever either moves.
+# A plugin instruction asset must never name the plugin's checkout path. Claude
+# provides ${CLAUDE_SKILL_DIR} for same-skill scripts and ${CLAUDE_PLUGIN_ROOT}
+# for cross-skill references. A literal path breaks in the installed cache.
 HARDCODED_SKILL_PATH_RE = re.compile(r"plugins/v8ch/skills/[^\s`'\"]*/scripts/")
-
-CONSENSUS_REVIEW_AGENTS = (
-    "architecture-reviewer",
-    "consensus-review-fixer",
-    "consensus-review-poster",
-    "correctness-reviewer",
-    "review-synthesizer",
-    "standards-reviewer",
-)
 
 
 def strip_module_docstring(source: str) -> str:
@@ -124,14 +115,8 @@ def test_two_scripts_differing_only_in_docstring_hash_alike(tmp_path: Path) -> N
 
 
 def instruction_assets() -> list[Path]:
-    """Return the skill and role assets that must stay path-portable."""
-    return sorted(
-        [
-            SKILL_DIR / "SKILL.md",
-            *(SKILL_DIR / "references").glob("*.md"),
-            *(AGENTS_DIR / f"{name}.md" for name in CONSENSUS_REVIEW_AGENTS),
-        ]
-    )
+    """Return every Markdown instruction asset shipped by the plugin."""
+    return sorted(PLUGIN_DIR.rglob("*.md"))
 
 
 @pytest.mark.parametrize("asset", instruction_assets(), ids=lambda path: path.name)
@@ -141,7 +126,7 @@ def test_instruction_assets_do_not_hardcode_the_skill_script_path(asset: Path) -
     hit = match.group(0) if match else ""
     assert match is None, (
         f"{asset.relative_to(REPO_ROOT)} hardcodes '{hit}'. "
-        "Use ${CLAUDE_SKILL_DIR}/scripts/<name>.py instead."
+        "Use ${CLAUDE_SKILL_DIR} or ${CLAUDE_PLUGIN_ROOT} instead."
     )
 
 
@@ -151,6 +136,22 @@ def test_the_regex_catches_a_hardcoded_path() -> None:
     )
     assert not HARDCODED_SKILL_PATH_RE.search(
         "uv run ${CLAUDE_SKILL_DIR}/scripts/recover_context.py 7"
+    )
+    assert not HARDCODED_SKILL_PATH_RE.search(
+        "python ${CLAUDE_PLUGIN_ROOT}/skills/remember/scripts/validate_memory.py"
+    )
+
+
+def test_memory_skills_use_installed_plugin_paths_for_validation() -> None:
+    remember = (PLUGIN_DIR / "skills/remember/SKILL.md").read_text(encoding="utf-8")
+    recommend = (PLUGIN_DIR / "skills/recommend/SKILL.md").read_text(encoding="utf-8")
+
+    assert remember.count("${CLAUDE_SKILL_DIR}/scripts/validate_memory.py") == 7
+    assert (
+        recommend.count(
+            "${CLAUDE_PLUGIN_ROOT}/skills/remember/scripts/validate_memory.py"
+        )
+        == 3
     )
 
 
