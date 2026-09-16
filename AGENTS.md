@@ -24,6 +24,28 @@ typing, and testing expectations, read `CODING_STANDARDS.md`.
 - `tests/test_claude_marketplace.py` pins the expected version literally, so it
   moves in the same commit as the bump.
 
+## Agent workflow profile
+
+```yaml
+tracking: required
+merge_method: rebase
+quality_commands:
+  - npm run lint:md
+  - uv run black --check .
+  - uv run ruff check .
+  - uv run ruff format --check .
+  - uv run mypy
+  - uv run pytest
+release_steps:
+  - whenever a file under plugins/<name>/ changes, bump the version in
+    plugins/<name>/.claude-plugin/plugin.json and the literal version in
+    tests/test_claude_marketplace.py in the same pull request
+prohibited_actions:
+  - never move private vault content into this public repository
+  - never merge; the sponsor merges
+synchronized_with: v8chllc/codex-plugins
+```
+
 ## Validation
 
 Run the checks relevant to the files you changed. For broad changes, use the
