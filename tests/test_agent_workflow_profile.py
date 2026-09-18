@@ -14,7 +14,6 @@ EXPECTED_PROFILE = {
     "merge_method": "rebase",
     "quality_commands": [
         "npm run lint:md",
-        "uv run black --check .",
         "uv run ruff check .",
         "uv run ruff format --check .",
         "uv run mypy",
