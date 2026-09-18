@@ -36,9 +36,6 @@ jobs:
       - name: Lint Markdown
         run: npm run lint:md
 
-      - name: Check Python formatting
-        run: uv run black --check .
-
       - name: Lint Python
         run: uv run ruff check .
 

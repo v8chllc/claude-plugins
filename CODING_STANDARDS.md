@@ -2,7 +2,7 @@
 
 ## Python
 
-Use Python 3.12-compatible syntax. Format with Black at the repository default
+Use Python 3.12-compatible syntax. Format with Ruff at the repository default
 line length of 88 characters, and keep Ruff lint and format checks clean. Python
 modules and files should use `snake_case.py`; plugin and skill directories
 should use lowercase hyphenated names such as `consensus-review`.
@@ -37,7 +37,6 @@ Run the same checks used by CI before pushing:
 
 ```sh
 npm run lint:md
-uv run black --check .
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy
