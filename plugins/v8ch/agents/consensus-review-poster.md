@@ -65,7 +65,6 @@ uv run <skill-dir>/scripts/post_review_comment.py \
   --repo-dir <repo-dir> \
   --cycle <cycle> \
   --status <clean|passing|failing> \
-  --score <score> \
   --delegation-mode <parallel-subagents|sequential-fallback> \
   --plan-source '<none | supplied: source>' \
   --reviewed-sha <sha> \
