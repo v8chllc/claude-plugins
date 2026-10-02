@@ -124,9 +124,10 @@ prompt. Agents do not receive skill variables.
    names no command — `none` in any form, such as `none (read-only review)` —
    also failed its pass: that role has Bash and must run and record the
    repository's checks. `v8ch:correctness-reviewer` and
-   `v8ch:architecture-reviewer` have only Read, Grep, and Glob.
-   `Commands run: none` in any form from either is a complete, passing answer
-   and never by itself a reason to rerun it. Rerun a reviewer that failed its
+   `v8ch:architecture-reviewer` have only Read, Grep, and Glob, so
+   `Commands run: none` in any form from `v8ch:correctness-reviewer` or
+   `v8ch:architecture-reviewer` is a complete, passing answer and never by
+   itself a reason to rerun it. Rerun a reviewer that failed its
    pass, once. On a second failure, emit `EVIDENCE_FAILED` with
    the failed pass names and stop, with no score.
 
@@ -144,6 +145,13 @@ prompt. Agents do not receive skill variables.
    labeled in full, the delegation mode, the plan source, and
    `RECOVERED_CONTEXT`. It decides the score and the status; you do not
    recompute either. Repeat step 6 afterwards.
+
+   The synthesizer applies the same evidence gate as step 5. If it returns
+   `### Review Status: FAILED`, each reviewer it names failed its pass. Rerun
+   each named reviewer whose pass has not already failed once in this cycle,
+   apply step 5 to its new output, and synthesize again. A pass that fails a
+   second time, at either gate, ends the review: emit `EVIDENCE_FAILED` with
+   the failed pass names and stop, with no score.
 
 8. **Return or post.**
    - **No PR/MR number:** return the report as-is, emit `REVIEW_COMPLETE` with

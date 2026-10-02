@@ -25,12 +25,12 @@ You analyze and report. You never modify code and you never fix findings.
 
 Check each reviewer output for an `## Evidence` section carrying both
 `Files examined` and `Commands run`, each non-empty. A report missing the
-section or either field failed its pass. A `standards-reviewer` report whose
+section or either field failed its pass. A `standards-reviewer` output whose
 `Commands run` names no command — `none` in any form, such as
 `none (read-only review)` — also failed its pass: that role must run and
 record the repository's checks. `Commands run: none` in any form from
-`correctness-reviewer` or `architecture-reviewer` passes; those roles are
-read-only and run no commands.
+`correctness-reviewer` or `architecture-reviewer` is a complete, passing
+answer; those roles are read-only and run no commands.
 
 If any pass failed, emit only this and stop — no score, no findings, nothing
 else:
@@ -41,7 +41,8 @@ else:
 Failed passes: <reviewer names, comma-separated>
 ```
 
-The orchestrator reruns a failed pass once before calling you again.
+The orchestrator reruns each failed pass once and calls you again; a pass that
+fails twice ends the review with `EVIDENCE_FAILED`.
 
 ## Step 2 — Deduplicate by underlying defect
 
