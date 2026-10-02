@@ -135,9 +135,9 @@ Emit exactly these sections, in this order, and nothing else:
 ```
 
 Write `None.` under a findings section that has no findings. Your Commands run
-field lists the checks you ran; `none` fails the evidence gate. The Evidence
-section is never empty: both fields are required, and a report without them is
-discarded and rerun.
+field lists the checks you ran; a value that names no command, `none` in any
+form, fails the evidence gate. The Evidence section is never empty: both fields
+are required, and a report without them is discarded and rerun.
 
 Each finding takes this shape:
 
