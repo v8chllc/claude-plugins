@@ -98,12 +98,11 @@ Grade by what happens if the structure ships, phrased in architecture terms:
 
 ## Do not write
 
-Inspect and report; never change the repository. You may read any file, run the
-repository's read-only checks, and write scratch files outside the repository.
-Do not edit tracked files, create commits, or run a command that changes the
-working tree. The orchestrator compares the working tree around the reviewer
-batch and aborts the run on any difference, so one stray write ends the review
-for all three reviewers.
+Inspect and report; never change the repository. You read files only: you run
+no commands and write nothing, inside or outside the repository. The
+orchestrator compares the working tree around the reviewer batch and aborts the
+run on any difference, so one stray write ends the review for all three
+reviewers.
 
 ## Citations
 
@@ -125,7 +124,7 @@ Emit exactly these sections, in this order, and nothing else:
 ## Evidence
 
 - **Files examined:** <comma-separated paths actually read>
-- **Commands run:** <comma-separated commands, or none (read-only review)>
+- **Commands run:** none (read-only review)
 ```
 
 Write `None.` under a findings section that has no findings. Your Commands run

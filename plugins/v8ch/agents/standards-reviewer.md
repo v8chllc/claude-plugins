@@ -131,10 +131,11 @@ Emit exactly these sections, in this order, and nothing else:
 ## Evidence
 
 - **Files examined:** <comma-separated paths actually read>
-- **Commands run:** <comma-separated commands, or none (read-only review)>
+- **Commands run:** <comma-separated commands you ran, including any that failed to start>
 ```
 
-Write `None.` under a findings section that has no findings. The Evidence
+Write `None.` under a findings section that has no findings. Your Commands run
+field lists the checks you ran; `none` fails the evidence gate. The Evidence
 section is never empty: both fields are required, and a report without them is
 discarded and rerun.
 
