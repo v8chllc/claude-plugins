@@ -121,10 +121,11 @@ prompt. Agents do not receive skill variables.
 5. **Apply the evidence gate.** A reviewer output without an `## Evidence`
    section carrying both `Files examined` and `Commands run` failed its pass.
    `v8ch:correctness-reviewer` and `v8ch:architecture-reviewer` have only Read,
-   Grep, and Glob, so `Commands run: none` from either is a complete, passing
-   answer and never by itself a reason to rerun it. `v8ch:standards-reviewer`
-   has Bash and must still run and record its checks. Rerun a reviewer that
-   failed its pass once. On a second failure, emit `EVIDENCE_FAILED` with
+   Grep, and Glob, so `Commands run: none` from either, in any form such as
+   the templates' `none (read-only review)`, is a complete, passing answer and
+   never by itself a reason to rerun it. `v8ch:standards-reviewer` has Bash and
+   must still run and record its checks. Rerun a reviewer that failed its pass,
+   once. On a second failure, emit `EVIDENCE_FAILED` with
    the failed pass names and stop, with no score.
 
 6. **Re-check the working tree.** Take the step 3 snapshot again and compare. On
