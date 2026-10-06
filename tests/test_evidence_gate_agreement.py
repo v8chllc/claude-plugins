@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.test_claude_marketplace import parse_frontmatter
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILL = REPO_ROOT / "plugins/v8ch/skills/consensus-review/SKILL.md"
 SYNTHESIZER = REPO_ROOT / "plugins/v8ch/agents/review-synthesizer.md"
@@ -73,6 +75,7 @@ def test_ignored_cache_attribution_matches_reviewer_tool_grants() -> None:
     )
     assert attribution in text
     for role in ("standards", "correctness", "architecture"):
-        agent = (REVIEWER_AGENTS / f"{role}-reviewer.md").read_text(encoding="utf-8")
-        tools = section(agent, "tools: [", "]")
-        assert ('"Bash"' in tools) is (role == "standards")
+        frontmatter = parse_frontmatter(REVIEWER_AGENTS / f"{role}-reviewer.md")
+        tools = frontmatter["tools"]
+        assert isinstance(tools, list)
+        assert ("Bash" in tools) is (role == "standards")

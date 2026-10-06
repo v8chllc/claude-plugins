@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MARKETPLACE_PATH = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 ALLOWED_AGENT_COLORS = {"blue", "cyan", "green", "yellow", "magenta", "red"}
@@ -17,16 +19,8 @@ def parse_frontmatter(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8")
     assert text.startswith("---\n")
     raw_header = text.split("---", 2)[1]
-    header: dict[str, Any] = {}
-    for raw_line in raw_header.splitlines():
-        if not raw_line or ":" not in raw_line:
-            continue
-        key, raw_value = raw_line.split(":", 1)
-        value = raw_value.strip()
-        if value.startswith("["):
-            header[key] = json.loads(value)
-        else:
-            header[key] = value
+    header = yaml.safe_load(raw_header)
+    assert isinstance(header, dict)
     return header
 
 
