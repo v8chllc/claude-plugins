@@ -127,7 +127,9 @@ prompt. Agents do not receive skill variables.
    `v8ch:architecture-reviewer` have only Read, Grep, and Glob, so
    `Commands run: none` in any form from `v8ch:correctness-reviewer` or
    `v8ch:architecture-reviewer` is a complete, passing answer and never by
-   itself a reason to rerun it. Rerun a reviewer that failed its
+   itself a reason to rerun it. A `v8ch:correctness-reviewer` or
+   `v8ch:architecture-reviewer` output whose `Commands run` names any command
+   failed its pass. Rerun a reviewer that failed its
    pass, once. On a second failure, emit `EVIDENCE_FAILED` with
    the failed pass names and stop, with no score.
 
@@ -136,10 +138,10 @@ prompt. Agents do not receive skill variables.
    nothing.
 
    The comparison covers new commits and changes to tracked and untracked paths
-   inside the repository. It does not cover ignored paths — reviewers run the
-   repository's lint, type, and test commands, which write caches there — nor
-   anything outside the repository. Those limits are why the roles are also told
-   not to write, rather than relying on this check alone.
+   inside the repository. It does not cover ignored paths — `standards-reviewer`
+   runs the repository's lint, type, and test commands, which write caches there
+   — nor anything outside the repository. Those limits are why the roles are
+   also told not to write, rather than relying on this check alone.
 
 7. **Synthesize.** Invoke `v8ch:review-synthesizer` with all three outputs
    labeled in full, the delegation mode, the plan source, and
