@@ -289,7 +289,10 @@ def modules_beside_validator() -> set[str]:
         name
         for name, module in sys.modules.items()
         if (file := getattr(module, "__file__", None))
-        and Path(file).resolve().parent == folder
+        and (
+            Path(file).resolve().parent == folder
+            or folder in Path(file).resolve().parents
+        )
     }
 
 
@@ -457,7 +460,7 @@ def test_review_search_match_must_clearly_track_the_entry() -> None:
     section = review_section()
 
     assert "count only when the issue clearly tracks this entry" in section
-    assert "summary names it so the user can judge" in section
+    assert "naming the issue so the user can judge" in section
 
 
 def test_review_follow_up_covers_each_uncovered_steering_target() -> None:
@@ -493,8 +496,8 @@ def test_review_keeps_work_item_files_out_of_the_tree_and_shell() -> None:
     assert "write any title file by the same file-edit tool or quoted heredoc" in (
         section
     )
-    assert "outside the repository, or at a temporary path that is removed" in (section)
-    assert "after `gh issue create`" in section
+    assert "files outside the repository (for example under `mktemp -d`)" in section
+    assert "whether or not `gh issue create` succeeds" in section
 
 
 def test_review_allows_reading_how_a_work_item_closed() -> None:
@@ -551,11 +554,44 @@ def test_review_names_the_repository_a_short_reference_resolves_against() -> Non
     bullet = work_item_bullet()
 
     assert "`gh repo view --json nameWithOwner` reports" in bullet
-    assert "resolved `owner/repo#N` beside the original value" in bullet
+    assert "the checkout repository from Parse" in bullet
 
 
 def test_review_reports_legacy_closed_items_and_json_errors() -> None:
     bullet = work_item_bullet()
 
-    assert "A `gh` error on `--json` counts as not resolving" in bullet
-    assert "names each closed item with an empty `stateReason`" in bullet
+    assert "Any `gh` failure (a lookup, a search, or `gh repo view`)" in bullet
+    assert "counts as not resolving" in bullet
+    assert "`stateReason` is empty or unknown" in bullet
+
+
+def test_review_step_nine_lists_the_step_six_report_items() -> None:
+    review = workflow_block(REVIEW_HEADING)
+    nine = normalized(
+        next(x for x in re.split(r"(?m)^(?=\d+\. )", review) if x.startswith("9. "))
+    )
+
+    assert "Also report from step 6: each `gh` failure" in nine
+    assert "empty or unknown `stateReason`" in nine
+    assert "the original value beside it" in nine
+
+
+def test_review_work_item_promotions_step_is_split_into_three_parts() -> None:
+    review = workflow_block(REVIEW_HEADING)
+    number = review_step_number("Work-item promotions")
+    block = next(
+        x for x in re.split(r"(?m)^(?=\d+\. )", review) if x.startswith(f"{number}. ")
+    )
+
+    labels = re.findall(r"(?m)^   - (\*\*\w+\.\*\*)", block)
+    assert labels == ["**Destination.**", "**Proposal.**", "**Creating.**"]
+
+
+def test_modules_beside_validator_includes_nested_packages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    nested = ModuleType("fake_sibling_package.sub")
+    nested.__file__ = str(VALIDATOR_PATH.parent / "fake_sibling_package" / "sub.py")
+    monkeypatch.setitem(sys.modules, "fake_sibling_package.sub", nested)
+
+    assert "fake_sibling_package.sub" in modules_beside_validator()
