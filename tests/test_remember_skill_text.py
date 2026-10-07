@@ -1,5 +1,6 @@
 """Stable-phrase guards for the remember and recommend skill instructions."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "plugins/v8ch/skills"
 REMEMBER_DIR = SKILLS_DIR / "remember"
 TYPES_PATH = REMEMBER_DIR / "references/types.md"
+VALIDATOR_PATH = REMEMBER_DIR / "scripts/validate_memory.py"
 LEGACY_DIRECTIVE = REMEMBER_DIR / "references/claude-md-directive.md"
 REVIEW_HEADING = "## Workflow J: Review"
 PROCEDURAL_WRITE = "Workflow I"
@@ -107,10 +109,12 @@ def test_review_routes_promotions_through_their_write_paths() -> None:
 def test_review_removes_promoted_entries_without_a_pointer() -> None:
     section = review_section()
 
-    assert "only after every approved destination for it has landed" in section
+    assert "only when every proposed promotion for it was approved" in section
+    assert "If any proposed promotion for an entry is declined or fails" in section
+    assert "approving it removes the entry" in section
     assert "decisions included" in section
     assert "leave no pointer" in section
-    assert "A declined or failed promotion leaves the entry unchanged" in section
+    assert "leave the entry unchanged" in section
     assert "update `todo` entries with the `Work item` field" not in section
 
 
@@ -122,3 +126,48 @@ def test_review_summary_groups_and_needs_per_item_approval() -> None:
     assert "Nothing is removed, written, or created without per-item approval" in (
         section
     )
+
+
+def test_review_runs_validation_before_classifying() -> None:
+    section = review_section()
+
+    assert "scripts/validate_memory.py" in section
+    assert section.index("validate_memory.py") < section.index("Classify each entry")
+
+
+def test_review_delegates_steering_writes_to_named_steps() -> None:
+    section = review_section()
+
+    assert "Workflow I step 5 does" in section
+    assert "review never creates a missing target" in section
+
+
+def test_review_passes_work_item_text_by_file() -> None:
+    assert "`--body-file`" in review_section()
+
+
+def test_review_todo_can_promote_to_steering() -> None:
+    assert "promote → steering when it is really a standing rule" in review_section()
+
+
+def test_memory_skill_assets_are_found() -> None:
+    assert len(memory_skill_assets()) >= 4
+
+
+def test_memory_type_lists_agree() -> None:
+    match = re.search(r"MEMORY_TYPES = \((.*?)\)", VALIDATOR_PATH.read_text("utf-8"))
+    assert match
+    types = re.findall(r'"([a-z]+)"', match.group(1))
+    skill = (REMEMBER_DIR / "SKILL.md").read_text(encoding="utf-8")
+    stub = skill[skill.index("# Memory\n") :]
+    stub = stub[: stub.index("```")]
+
+    assert re.findall(r"^## (\w+)$", TYPES_PATH.read_text("utf-8"), re.M) == types
+    assert re.findall(r"^## (\w+)$", stub, re.M) == types
+
+
+def test_todo_template_marks_work_item_legacy() -> None:
+    text = normalized(TYPES_PATH.read_text(encoding="utf-8"))
+
+    assert "Work item: <legacy; leave empty" in text
+    assert "<optional link/id if created>" not in text
