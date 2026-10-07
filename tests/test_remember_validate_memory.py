@@ -17,6 +17,9 @@ SCRIPT = (
 STEERING_FILE = "CLAUDE.md"
 SETUP_COMMAND = "/remember setup"
 TOOLCHAIN = "claude"
+LEGACY_TYPE = "context"
+LEGACY_LOCAL_DIR = ".remember/local"
+LEGACY_LOCAL_FILE = "context.md"
 
 
 def write_valid_memory(root: Path) -> None:
@@ -94,6 +97,16 @@ def run_validate(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def init_git_repo(root: Path) -> None:
+    """Initialize a minimal git repository for testing git-dependent validations."""
+    for args in (
+        ["init", "--quiet"],
+        ["config", "user.email", "test@example.com"],
+        ["config", "user.name", "Test"],
+    ):
+        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+
+
 def test_valid_memory_json_output_passes(tmp_path: Path) -> None:
     write_valid_memory(tmp_path)
 
@@ -126,19 +139,20 @@ def test_missing_required_field_is_reported(tmp_path: Path) -> None:
     assert any("Scope" in issue["message"] for issue in payload["issues"])
 
 
-def test_context_entry_in_memory_file_is_an_error(tmp_path: Path) -> None:
+def test_legacy_marker_is_reported_as_an_unknown_marker(tmp_path: Path) -> None:
+    """A leftover legacy marker falls to the generic unknown-marker check."""
     write_valid_memory(tmp_path)
     memory_path = tmp_path / ".remember" / "MEMORY.md"
-    legacy_context = """
-## context
+    legacy = f"""
+## {LEGACY_TYPE}
 
-<!-- context -->
+<!-- {LEGACY_TYPE} -->
 Status: Implementing validation
 In progress: Adding focused tests
 Updated: 2026-07-03
 """
     memory_path.write_text(
-        f"{memory_path.read_text(encoding='utf-8')}{legacy_context}",
+        f"{memory_path.read_text(encoding='utf-8')}{legacy}",
         encoding="utf-8",
     )
 
@@ -147,11 +161,62 @@ Updated: 2026-07-03
     assert result.returncode == 1
     payload = json.loads(result.stdout)
     codes = {issue["code"] for issue in payload["issues"]}
-    assert "context_entry_in_memory_file" in codes
-    assert "legacy_context_section" in codes
-    severities = {issue["code"]: issue["severity"] for issue in payload["issues"]}
-    assert severities["context_entry_in_memory_file"] == "error"
-    assert severities["legacy_context_section"] == "warning"
+    assert "unknown_memory_marker" in codes
+    assert not [code for code in codes if LEGACY_TYPE in code]
+    unknown = [
+        issue for issue in payload["issues"] if issue["code"] == "unknown_memory_marker"
+    ]
+    assert [issue["suggested_fix"] for issue in unknown] == [
+        "Use one of: entity, decision, error, preference, todo."
+    ]
+
+
+def test_bare_legacy_section_heading_passes(tmp_path: Path) -> None:
+    """A legacy section heading with no entries raises no issue."""
+    write_valid_memory(tmp_path)
+    memory_path = tmp_path / ".remember" / "MEMORY.md"
+    memory_path.write_text(
+        f"{memory_path.read_text(encoding='utf-8')}\n## {LEGACY_TYPE}\n",
+        encoding="utf-8",
+    )
+
+    result = run_validate(tmp_path, "--json")
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["issues"] == []
+
+
+def test_legacy_local_file_is_not_read_in_an_unignored_git_repo(
+    tmp_path: Path,
+) -> None:
+    """A legacy local lane file is never read, even when Git does not ignore it."""
+    init_git_repo(tmp_path)
+    write_valid_memory(tmp_path)
+    local_dir = tmp_path / LEGACY_LOCAL_DIR
+    local_dir.mkdir(parents=True)
+    (local_dir / LEGACY_LOCAL_FILE).write_text(
+        f"""<!-- {LEGACY_TYPE} -->
+Status:
+<!-- unknown-marker -->
+""",
+        encoding="utf-8",
+    )
+
+    result = run_validate(tmp_path, "--json")
+
+    payload = json.loads(result.stdout)
+    for issue in payload["issues"]:
+        for field in ("path", "message"):
+            assert LEGACY_LOCAL_DIR not in issue[field]
+            assert LEGACY_LOCAL_FILE not in issue[field]
+    assert result.returncode == 0
+    assert payload["issues"] == []
+
+
+def test_validator_source_has_no_legacy_type() -> None:
+    """The validator carries no constant, function, field, or code for the type."""
+    assert LEGACY_TYPE not in SCRIPT.read_text(encoding="utf-8")
 
 
 def test_bad_journal_filename_and_missing_metadata_are_reported(
@@ -296,169 +361,6 @@ def test_invalid_lifecycle_segment_is_reported(tmp_path: Path) -> None:
     )
 
 
-def write_local_context(root: Path, body: str) -> Path:
-    """Write a local context file with the given body and return its path."""
-    local_dir = root / ".remember" / "local"
-    local_dir.mkdir(parents=True, exist_ok=True)
-    context_path = local_dir / "context.md"
-    context_path.write_text(body, encoding="utf-8")
-    return context_path
-
-
-VALID_LOCAL_CONTEXT = """<!-- context -->
-Status: Implementing validation
-In progress: Adding focused tests
-Updated: 2026-07-03
-"""
-
-
-def test_valid_local_context_passes(tmp_path: Path) -> None:
-    """Verify that a valid local context file passes validation."""
-    write_valid_memory(tmp_path)
-    write_local_context(tmp_path, VALID_LOCAL_CONTEXT)
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 0
-    payload = json.loads(result.stdout)
-    assert payload["issues"] == []
-
-
-def test_missing_local_context_is_not_an_issue(tmp_path: Path) -> None:
-    """Verify that a missing local context file does not trigger validation errors."""
-    write_valid_memory(tmp_path)
-    (tmp_path / ".remember" / "local").mkdir(parents=True)
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 0
-    payload = json.loads(result.stdout)
-    assert payload["issues"] == []
-
-
-def test_duplicate_local_context_entries_are_reported(tmp_path: Path) -> None:
-    """Verify that duplicate local context entries are reported."""
-    write_valid_memory(tmp_path)
-    write_local_context(
-        tmp_path,
-        """<!-- context -->
-Status: Implementing validation
-In progress: Adding focused tests
-Updated: 2026-07-03
-
-<!-- context -->
-Status: Second entry
-In progress: Something else
-Updated: 2026-07-04
-""",
-    )
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 1
-    payload = json.loads(result.stdout)
-    codes = {issue["code"] for issue in payload["issues"]}
-    assert "duplicate_context_entries" in codes
-
-
-def test_local_context_missing_required_field_is_reported(tmp_path: Path) -> None:
-    """Verify that a local context entry missing a required field is reported."""
-    write_valid_memory(tmp_path)
-    write_local_context(
-        tmp_path,
-        """<!-- context -->
-Status: Implementing validation
-Updated: 2026-07-03
-""",
-    )
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 1
-    payload = json.loads(result.stdout)
-    codes = {issue["code"] for issue in payload["issues"]}
-    assert "required_field_missing" in codes
-    assert any("In progress" in issue["message"] for issue in payload["issues"])
-
-
-def test_local_context_invalid_updated_date_is_reported(tmp_path: Path) -> None:
-    """Verify that an Updated value that is not a real date is reported."""
-    write_valid_memory(tmp_path)
-    write_local_context(
-        tmp_path,
-        """<!-- context -->
-Status: Implementing validation
-In progress: Adding focused tests
-Updated: 2026-02-31
-""",
-    )
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 1
-    payload = json.loads(result.stdout)
-    codes = {issue["code"] for issue in payload["issues"]}
-    assert "context_updated_invalid" in codes
-
-
-def test_unknown_marker_in_local_context_is_reported(tmp_path: Path) -> None:
-    """Verify that a non-context marker in local context is reported as an error."""
-    write_valid_memory(tmp_path)
-    write_local_context(
-        tmp_path,
-        """<!-- decision -->
-Decision: Wrong lane
-Date: 2026-07-03
-Rationale: Decisions belong in MEMORY.md
-""",
-    )
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 1
-    payload = json.loads(result.stdout)
-    codes = {issue["code"] for issue in payload["issues"]}
-    assert "unknown_memory_marker" in codes
-
-
-def init_git_repo(root: Path) -> None:
-    """Initialize a minimal git repository for testing git-dependent validations."""
-    for args in (
-        ["init", "--quiet"],
-        ["config", "user.email", "test@example.com"],
-        ["config", "user.name", "Test"],
-    ):
-        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
-
-
-def test_unignored_local_context_is_reported_in_a_git_repo(tmp_path: Path) -> None:
-    """Verify that an unignored local context directory is reported."""
-    init_git_repo(tmp_path)
-    write_valid_memory(tmp_path)
-    write_local_context(tmp_path, VALID_LOCAL_CONTEXT)
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 1
-    payload = json.loads(result.stdout)
-    codes = {issue["code"] for issue in payload["issues"]}
-    assert "local_context_not_ignored" in codes
-
-
-def test_ignored_local_context_passes_in_a_git_repo(tmp_path: Path) -> None:
-    """Verify that a gitignored local context passes in a Git repo."""
-    init_git_repo(tmp_path)
-    write_valid_memory(tmp_path)
-    write_local_context(tmp_path, VALID_LOCAL_CONTEXT)
-    (tmp_path / ".gitignore").write_text(".remember/local/\n", encoding="utf-8")
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 0
-    payload = json.loads(result.stdout)
-    assert payload["issues"] == []
-
-
 def test_generated_fast_track_section_reports_no_drift(tmp_path: Path) -> None:
     """Verify that a freshly generated fast-track section passes drift checks."""
     write_valid_memory(tmp_path)
@@ -478,6 +380,8 @@ def test_generated_fast_track_section_reports_no_drift(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     codes = {issue["code"] for issue in payload["issues"]}
     assert "fast_track_steering_drift" not in codes
+    section = (tmp_path / STEERING_FILE).read_text(encoding="utf-8")
+    assert LEGACY_LOCAL_DIR not in section
 
 
 def test_fast_track_drift_reports_missing_allowlist_paths(tmp_path: Path) -> None:
@@ -512,43 +416,6 @@ Allowed paths:
     assert any("WORKFLOW_STANDARDS.md" in issue["message"] for issue in drift)
     assert any(".remember/memory/" in issue["message"] for issue in drift)
     assert all(issue["severity"] == "warning" for issue in drift)
-
-
-def test_fast_track_drift_reports_stale_context_clause(tmp_path: Path) -> None:
-    """Verify that a stale context clause is reported as a drift warning."""
-    write_valid_memory(tmp_path)
-    (tmp_path / STEERING_FILE).write_text(
-        f"""# Steering
-
-## Memory Fast-Track Workflow
-
-Allowed paths:
-
-- `{STEERING_FILE}`
-- `CODING_STANDARDS.md`
-- `WORKFLOW_STANDARDS.md`
-- `.remember/MEMORY.md`
-- `.remember/memory/*.md`
-
-4. Resolve conflicts only in allowed memory files; preserve journal chronology
-   and update the single active `context` entry instead of duplicating it.
-""",
-        encoding="utf-8",
-    )
-
-    result = run_validate(
-        tmp_path, "--json", "--toolchain", TOOLCHAIN, "--check-steering"
-    )
-
-    assert result.returncode == 0
-    payload = json.loads(result.stdout)
-    drift = [
-        issue
-        for issue in payload["issues"]
-        if issue["code"] == "fast_track_steering_drift"
-    ]
-    assert len(drift) == 1
-    assert "context" in drift[0]["message"]
 
 
 def test_drift_check_does_not_rewrite_the_steering_file(tmp_path: Path) -> None:

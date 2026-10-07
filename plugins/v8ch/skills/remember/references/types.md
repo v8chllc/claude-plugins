@@ -1,7 +1,6 @@
 # Memory Types
 
-Six structured types. Five are curated memory in `.remember/MEMORY.md`;
-`context` is local-only state in `.remember/local/context.md`. Use these
+Five structured types, all curated memory in `.remember/MEMORY.md`. Use these
 templates when writing entries.
 
 ---
@@ -83,40 +82,6 @@ Status: resolved
 
 ---
 
-## context
-
-Current project state, what is in progress, and what is blocked.
-
-**Stored in `.remember/local/context.md`, never in `.remember/MEMORY.md`.** That
-directory is gitignored, so context stays in the checkout that wrote it. Context
-is state as of a moment on one machine; shared through Git it reads as durable
-fact on every other checkout long after it stopped being true.
-
-Update this type rather than appending a new entry — the file holds at most one
-active context entry.
-
-Template:
-```
-<!-- context -->
-Status: <phase or state>
-In progress: <what is being worked on>
-Blocked: <optional>
-Next: <optional>
-Updated: <YYYY-MM-DD>
-```
-
-Example:
-```
-<!-- context -->
-Status: Migrating auth layer from session cookies to JWT
-In progress: Implementing refresh token rotation
-Blocked: Waiting on security review of token storage approach
-Next: Update frontend to handle 401 + refresh flow
-Updated: 2025-05-25
-```
-
----
-
 ## preference
 
 How the user likes to work. Applies across sessions and is not project-specific.
@@ -155,12 +120,16 @@ Scope: global
 A durable follow-up item that should not be lost between sessions. Promote to a work item
 (issue, task, ticket) when ready for execution.
 
+A todo is only ever `open` or `blocked`. Promoting a todo to a work item, or
+completing or abandoning it, removes it from `.remember/MEMORY.md`; a completed or
+obsolete todo is removed, not marked.
+
 Template:
 ```
 <!-- todo -->
 Todo: <short action-oriented title>
 Source: <conversation | review | bug | plan | user>
-Status: <open | blocked | done | obsolete>
+Status: <open | blocked>
 Next action: <specific next step>
 Owner: <optional>
 Created: <YYYY-MM-DD>
