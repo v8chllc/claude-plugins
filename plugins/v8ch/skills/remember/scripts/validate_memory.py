@@ -9,20 +9,15 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 from typing import Any
 
 from lifecycle_segments import valid_segment
 
-MEMORY_TYPES = ("entity", "decision", "context", "error", "preference", "todo")
-MEMORY_SECTIONS = ("entity", "decision", "error", "preference", "todo")
-LOCAL_CONTEXT_DIR = ".remember/local"
-LOCAL_CONTEXT_FILE = ".remember/local/context.md"
+MEMORY_TYPES = ("entity", "decision", "error", "preference", "todo")
 REQUIRED_FIELDS = {
     "entity": ("Entity", "Type", "Location", "Purpose", "Dependencies"),
     "decision": ("Decision", "Date", "Rationale"),
-    "context": ("Status", "In progress", "Updated"),
     "error": ("Symptom", "Root cause", "Fix", "Status"),
     "preference": ("Preference", "Scope"),
     "todo": ("Todo", "Source", "Status", "Next action", "Created"),
@@ -31,16 +26,12 @@ JOURNAL_NAME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.md$")
 JOURNAL_BLOCK_RE = re.compile(r"<!--\s*remember-journal(?P<body>.*?)-->", re.DOTALL)
 MARKER_RE = re.compile(r"<!--\s*(?P<kind>[a-z][a-z-]*)\s*-->")
 HEADING_RE = re.compile(r"^##\s+(?P<section>[A-Za-z][A-Za-z -]*)\s*$", re.MULTILINE)
-DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 FAST_TRACK_HEADING = "## Memory Fast-Track Workflow"
 FAST_TRACK_REQUIRED_TOKENS = (
     "CODING_STANDARDS.md",
     "WORKFLOW_STANDARDS.md",
     ".remember/MEMORY.md",
     ".remember/memory/",
-)
-STALE_CONTEXT_CLAUSE_RE = re.compile(
-    r"single\s+(?:active\s+)?`context`\s+entry", re.IGNORECASE
 )
 
 
@@ -93,17 +84,6 @@ def parse_fields(block: str) -> dict[str, str]:
     return fields
 
 
-def valid_date(value: str) -> bool:
-    """Report whether a field value is a real calendar date in YYYY-MM-DD form."""
-    if not DATE_RE.fullmatch(value):
-        return False
-    try:
-        date.fromisoformat(value)
-    except ValueError:
-        return False
-    return True
-
-
 def memory_entries(text: str) -> list[tuple[str, str]]:
     matches = list(MARKER_RE.finditer(text))
     entries: list[tuple[str, str]] = []
@@ -141,7 +121,7 @@ def validate_memory_file(root: Path, issues: list[Issue]) -> None:
     sections = {
         match.group("section").strip().lower() for match in HEADING_RE.finditer(text)
     }
-    for memory_type in MEMORY_SECTIONS:
+    for memory_type in MEMORY_TYPES:
         if memory_type not in sections:
             add_issue(
                 issues,
@@ -151,16 +131,6 @@ def validate_memory_file(root: Path, issues: list[Issue]) -> None:
                 f"Missing required section ## {memory_type}.",
                 f"Add a ## {memory_type} section to .remember/MEMORY.md.",
             )
-    if "context" in sections:
-        add_issue(
-            issues,
-            "warning",
-            "legacy_context_section",
-            memory_path,
-            "Found a legacy ## context section; context now lives in "
-            f"{LOCAL_CONTEXT_FILE}.",
-            "Remove the ## context section from .remember/MEMORY.md.",
-        )
 
     for kind, block in memory_entries(text):
         if kind not in MEMORY_TYPES:
@@ -171,18 +141,6 @@ def validate_memory_file(root: Path, issues: list[Issue]) -> None:
                 memory_path,
                 f"Unknown memory entry marker <!-- {kind} -->.",
                 f"Use one of: {', '.join(MEMORY_TYPES)}.",
-            )
-            continue
-        if kind == "context":
-            add_issue(
-                issues,
-                "error",
-                "context_entry_in_memory_file",
-                memory_path,
-                "Curated context must not live in .remember/MEMORY.md; that "
-                "file is shared through Git and context goes stale on other "
-                "checkouts.",
-                f"Move the entry to {LOCAL_CONTEXT_FILE} and remove it here.",
             )
             continue
         fields = parse_fields(block)
@@ -196,87 +154,6 @@ def validate_memory_file(root: Path, issues: list[Issue]) -> None:
                     f"{kind} entry is missing required field {required}.",
                     f"Add {required}: <value> to the {kind} entry.",
                 )
-
-
-def local_context_ignored(root: Path) -> bool | None:
-    """Report whether `.remember/local/` is ignored, or None outside Git."""
-    try:
-        result = subprocess.run(
-            ["git", "check-ignore", "-q", LOCAL_CONTEXT_DIR],
-            cwd=root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return None
-    if result.returncode == 0:
-        return True
-    if result.returncode == 1:
-        return False
-    return None
-
-
-def validate_local_context(root: Path, issues: list[Issue]) -> None:
-    """Validate the gitignored local context file and its entries."""
-    local_dir = root / ".remember" / "local"
-    context_path = local_dir / "context.md"
-    if local_dir.is_dir() and local_context_ignored(root) is False:
-        add_issue(
-            issues,
-            "error",
-            "local_context_not_ignored",
-            local_dir,
-            f"{LOCAL_CONTEXT_DIR} is not ignored by Git; local context must "
-            "never be shared with another checkout.",
-            f"Add {LOCAL_CONTEXT_DIR}/ to .gitignore.",
-        )
-    if not context_path.is_file():
-        return
-    text = context_path.read_text(encoding="utf-8")
-    context_count = 0
-    for kind, block in memory_entries(text):
-        if kind != "context":
-            add_issue(
-                issues,
-                "error",
-                "unknown_memory_marker",
-                context_path,
-                f"Unknown memory entry marker <!-- {kind} -->.",
-                "The local context file holds <!-- context --> entries only.",
-            )
-            continue
-        context_count += 1
-        fields = parse_fields(block)
-        for required in REQUIRED_FIELDS["context"]:
-            if not fields.get(required):
-                add_issue(
-                    issues,
-                    "error",
-                    "required_field_missing",
-                    context_path,
-                    f"context entry is missing required field {required}.",
-                    f"Add {required}: <value> to the context entry.",
-                )
-        updated = fields.get("Updated")
-        if updated and not valid_date(updated):
-            add_issue(
-                issues,
-                "error",
-                "context_updated_invalid",
-                context_path,
-                f"context entry has an invalid Updated date {updated!r}.",
-                "Use a real calendar date in YYYY-MM-DD form.",
-            )
-    if context_count > 1:
-        add_issue(
-            issues,
-            "error",
-            "duplicate_context_entries",
-            context_path,
-            f"Found {context_count} active context entries; keep at most one.",
-            "Merge current state into a single <!-- context --> entry.",
-        )
 
 
 def validate_journals(root: Path, issues: list[Issue]) -> None:
@@ -424,10 +301,6 @@ If any other tracked, staged, modified, deleted, or untracked path is present,
 stop and ask the user whether to handle that work separately. Do not include
 non-memory files in a memory fast-track.
 
-`.remember/local/` holds gitignored local-only context. It never appears in
-`git status --short`, so it cannot reach this gate. Do not add it to the
-allowlist.
-
 Required sequence:
 
 1. Confirm the user explicitly requested a memory fast-track.
@@ -480,17 +353,6 @@ def check_fast_track_drift(
             "Memory Fast-Track allowlist is missing: " + ", ".join(missing) + ".",
             "Restore the missing paths to the allowlist; the gate fails open "
             "for any path it does not name.",
-        )
-    if STALE_CONTEXT_CLAUSE_RE.search(body):
-        add_issue(
-            issues,
-            "warning",
-            "fast_track_steering_drift",
-            path,
-            "Memory Fast-Track conflict step still references a single active "
-            f"context entry; context now lives in {LOCAL_CONTEXT_FILE}.",
-            "Update the conflict-resolution step to dedupe structured entries "
-            "in .remember/MEMORY.md.",
         )
 
 
@@ -620,7 +482,6 @@ def main(argv: list[str] | None = None) -> int:
     root = args.root.resolve()
     issues: list[Issue] = []
     validate_memory_file(root, issues)
-    validate_local_context(root, issues)
     validate_journals(root, issues)
     validate_lifecycle_segments(root, issues)
     fast_track_added = False
