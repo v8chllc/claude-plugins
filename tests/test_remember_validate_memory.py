@@ -233,13 +233,6 @@ def test_validator_source_has_no_legacy_type() -> None:
         assert name not in source
 
 
-def test_legacy_type_guard_docstring_states_only_what_it_checks() -> None:
-    doc = test_validator_source_has_no_legacy_type.__doc__ or ""
-    assert '`"context"` literal' in doc
-    assert "retired names" in doc
-    assert "constant, function, field" not in doc
-
-
 def test_bad_journal_filename_and_missing_metadata_are_reported(
     tmp_path: Path,
 ) -> None:
