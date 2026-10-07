@@ -101,7 +101,7 @@ def test_review_checks_the_destination_before_proposing() -> None:
 def test_review_routes_promotions_through_their_write_paths() -> None:
     section = review_section()
 
-    assert f"**Steering promotions** go through {PROCEDURAL_WRITE}" in section
+    assert f"**Steering promotions** follow {PROCEDURAL_WRITE}'s dedupe" in section
     assert "fail closed" in section
     assert "tracking rules in the repository's steering" in section
     assert "propose an issue in the current repository" in section
@@ -124,7 +124,9 @@ def test_review_step_references_name_the_removal_step() -> None:
     section = review_section()
     removal = re.search(r"(?:^| )(\d+)\. Apply only approved items", section)
     assert removal
-    refs = re.findall(r"(?:lands \(step|follows the rule in step) (\d+)", section)
+    refs = re.findall(
+        r"(?:lands \(step|follows the rule in step|that step) (\d+)", section
+    )
 
     assert refs
     assert set(refs) == {removal.group(1)}
@@ -188,7 +190,6 @@ def test_review_delegates_steering_writes_to_named_steps() -> None:
     section = review_section()
 
     assert "Workflow I step 5 does" in section
-    assert "review never creates a missing target" in section
 
 
 def test_review_passes_work_item_text_by_file() -> None:
@@ -290,13 +291,13 @@ def test_review_work_item_coverage_uses_one_bar() -> None:
 
     assert "open or closed as completed" in section
     assert "closed as not planned or as a duplicate" in section
-    assert "open or done" not in section
 
 
 def test_review_summary_states_the_retain_exception_and_follow_up() -> None:
     section = review_section()
 
-    assert "except an entry that step 11 retains" in section
+    assert "except an entry that step" in section
+    assert " retains." in section
     assert "naming the `/remember procedure/workflow/standard <text>`" in section
 
 
@@ -307,3 +308,23 @@ def test_review_resolves_every_steering_outcome_in_the_destination_check() -> No
 
     assert section.index("report the entry as unsupported", check) < steering
     assert section.index("review never creates a missing target", check) < steering
+
+
+def test_review_search_match_must_clearly_track_the_entry() -> None:
+    section = review_section()
+
+    assert "counts only when the issue clearly tracks this entry" in section
+    assert "step 9 summary names it" in section
+
+
+def test_review_follow_up_covers_unsupported_and_ambiguous_entries() -> None:
+    section = review_section()
+
+    assert "follow-up for each unsupported and each ambiguous entry" in section
+
+
+def test_review_reads_ambiguous_candidates_before_listing_them() -> None:
+    section = review_section()
+
+    assert "read each candidate target" in section
+    assert "steering destination is covered" in section

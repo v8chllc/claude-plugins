@@ -448,19 +448,24 @@ Triggered by `/remember review`, "review memory", "audit memories", or "clean up
 6. **Destination check**: before proposing any promotion, check its
    destination. For `promote → steering`, resolve the target from
    `references/procedural-targets.md` and read it. If the target is ambiguous,
-   do not ask now: list the entry with its candidate targets in the step 9
-   summary and propose no steering patch for it. If no approved target fits, or
+   do not ask now: read each candidate target. If any candidate already holds
+   the guidance, the steering destination is covered. If none does, list the
+   entry with its candidate targets in the step 9 summary and propose no
+   steering patch for it. If no approved target fits, or
    the target file does not exist, report the entry as unsupported and propose
    no patch; review never creates a missing target and never writes elsewhere.
    For `promote → work item`, look for an existing work item that already
    tracks the entry, such as a matching issue or a filled `Work item` field.
    Either counts only when it resolves and is open or closed as completed; an
    item closed as not planned or as a duplicate, or one that does not resolve,
-   counts as absent. Check each destination separately. Drop only the promotion whose
+   counts as absent. A match found by search counts only when the issue clearly
+   tracks this entry, and the step 9 summary names it so the user can judge.
+   Check each destination separately. Drop only the promotion whose
    destination already covers the entry, and name that destination. Reclassify
    the entry as `remove` only when every destination that fits it is already
    covered.
-7. **Steering promotions** go through Workflow I: approved targets from
+7. **Steering promotions** follow Workflow I's dedupe and patch format
+   (steps 3-4) and are written in step 11: approved targets from
    `references/procedural-targets.md` only, fail closed, and a patch shown for
    approval.
 8. **Work-item promotions** follow the tracking rules in the repository's
@@ -481,7 +486,7 @@ Triggered by `/remember review`, "review memory", "audit memories", or "clean up
    promotions by destination: work items first, then each steering file with
    its proposed patch. List unsupported and ambiguous steering candidates
    separately, naming the `/remember procedure/workflow/standard <text>`
-   follow-up for each ambiguous entry. For every promotion, state that the
+   follow-up for each unsupported and each ambiguous entry. For every promotion, state that the
    promoted entry is removed from `.remember/MEMORY.md` once every promotion
    proposed for it is approved and lands (step 11), except an entry that step
    11 retains.
