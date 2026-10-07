@@ -455,11 +455,10 @@ except the validated parts allowed in step 6.
      `references/procedural-targets.md` and read it. If the target is
      ambiguous, do not ask now: read each candidate target. If any candidate
      already holds the guidance, the steering destination is covered. If none
-     does, list the entry with its candidate targets in the step 9 summary and
-     propose no steering patch for it. If no approved target fits, or the
-     target file does not exist, report the entry as unsupported and propose
-     no patch; review never creates a missing target and never writes
-     elsewhere. An unsupported target, or an ambiguous one that no candidate
+     does, propose no steering patch for it (reported in step 9). If no
+     approved target fits, or the target file does not exist, report the entry
+     as unsupported and propose no patch; review never creates a missing
+     target and never writes elsewhere. An unsupported target, or an ambiguous one that no candidate
      already covers, is an uncovered steering target.
    - **Work item.** For `promote → work item`, look for an existing work item
      that already tracks the entry, such as a matching issue or a filled
@@ -473,7 +472,8 @@ except the validated parts allowed in step 6.
        `gh repo view --json nameWithOwner` reports.
      - **Look up.** For a parsed `Work item` value, pass `gh` only
        `issue view N --repo owner/repo` built from the parsed parts (or, for
-       `#N`, the checkout repository from Parse), never the original field; add
+       `#N` or bare digits, the checkout repository from Parse), never the
+       original field; add
        `--json state,stateReason` to read how it closed. Read a search match
        the same way, with `--json state,stateReason`. Search with keywords of
        your own, never copied from the entry. Any `gh` failure (a lookup, a
@@ -483,8 +483,8 @@ except the validated parts allowed in step 6.
        a closed item whose `stateReason` is empty or unknown, or one that does
        not resolve, counts as absent. A match found by search, and a `#N` or
        bare-digit value, which may point at an unrelated issue in the current
-       checkout, count only when the issue clearly tracks this entry. Report
-       each of these in the step 9 summary.
+       checkout, count only when the issue clearly tracks this entry (reported
+       in step 9).
    - **Combining.** Check each destination separately. Drop only the
      promotion whose destination already covers the entry, and name that
      destination. Reclassify the entry as `remove` only when every destination
@@ -520,18 +520,23 @@ except the validated parts allowed in step 6.
      them whether or not `gh issue create` succeeds, so entry text is never
      left in the working tree.
 9. Respond with a concise summary grouped by outcome (`retain`, `remove`,
-   `promote → work item`, `promote → steering`) with counts per outcome. Group
-   promotions by destination: work items first, then each steering file with
-   its proposed patch. List uncovered steering targets separately, naming
-   the `/remember procedure/workflow/standard <text>` follow-up for each
-   uncovered steering target. Also report from step 6: each `gh` failure;
-   each closed item with an empty or unknown `stateReason`; and each match
-   found by search or `#N` or bare-digit value that was counted, naming the
-   issue so the user can judge, with the resolved `owner/repo#N`, and for a
-   `#N` or bare-digit value, the original value beside it. For every
-   promotion, state that the promoted entry is removed from
-   `.remember/MEMORY.md` once every promotion proposed for it is approved and
-   lands (step 11), except an entry that step 11 retains.
+   `promote → work item`, `promote → steering`) with counts per outcome, in
+   these parts:
+   - **Outcomes.** Group promotions by destination: work items first, then
+     each steering file with its proposed patch.
+   - **Steering follow-ups.** List uncovered steering targets separately,
+     naming the `/remember procedure/workflow/standard <text>` follow-up for
+     each uncovered steering target. List the entry with its candidate targets
+     when the target was ambiguous.
+   - **Destination-check reports.** Also report from step 6: each `gh` failure;
+     each closed item with an empty or unknown `stateReason`; each counted
+     search match; and each counted `#N` or bare-digit value. For a match or
+     value, give the resolved `owner/repo#N`, naming the issue so the user
+     can judge; for a `#N` or bare-digit value, add the original value beside
+     it.
+   - **Removal.** For every promotion, state that the promoted entry is
+     removed from `.remember/MEMORY.md` once every promotion proposed for it is
+     approved and lands (step 11), except an entry that step 11 retains.
 10. Ask for per-item approval. Nothing is removed, written, or created without
     per-item approval: each `remove` entry, each work item, and each steering
     patch is approved on its own; a promoted entry's removal follows the rule
