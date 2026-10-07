@@ -226,11 +226,18 @@ Status:
 
 
 def test_validator_source_has_no_legacy_type() -> None:
-    """The validator carries no constant, function, field, or code for the type."""
+    """The validator carries no `"context"` literal and none of the retired names."""
     source = SCRIPT.read_text(encoding="utf-8")
     assert f'"{LEGACY_TYPE}"' not in source
     for name in RETIRED_NAMES:
         assert name not in source
+
+
+def test_legacy_type_guard_docstring_states_only_what_it_checks() -> None:
+    doc = test_validator_source_has_no_legacy_type.__doc__ or ""
+    assert '`"context"` literal' in doc
+    assert "retired names" in doc
+    assert "constant, function, field" not in doc
 
 
 def test_bad_journal_filename_and_missing_metadata_are_reported(
