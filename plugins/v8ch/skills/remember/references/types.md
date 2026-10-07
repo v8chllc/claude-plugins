@@ -1,6 +1,6 @@
 # Memory Types
 
-Five structured types, all curated memory in `.remember/MEMORY.md`. Use these
+Structured types, all curated memory in `.remember/MEMORY.md`. Use these
 templates when writing entries.
 
 ---
