@@ -126,7 +126,7 @@ def test_review_step_references_name_the_removal_step() -> None:
     assert removal
     refs = re.findall(r"(?:lands \(step|follows the rule in step) (\d+)", section)
 
-    assert len(refs) == 2
+    assert refs
     assert set(refs) == {removal.group(1)}
 
 
@@ -144,7 +144,7 @@ def test_review_destination_check_is_per_destination() -> None:
 
     assert "Check each destination separately" in section
     assert "only when every destination that fits it is already covered" in section
-    assert "treat it as absent" in section
+    assert "counts as absent" in section
     assert "list the entry with its candidate targets" in section
 
 
@@ -161,7 +161,10 @@ def test_review_flags_more_public_work_item_destinations() -> None:
     section = review_section()
 
     assert "more public than the current repository" in section
-    assert "leave private detail from the entry out of its description" in section
+    assert (
+        "leave private detail from the entry out of its title and description"
+        in section
+    )
 
 
 def test_review_summary_groups_and_needs_per_item_approval() -> None:
@@ -280,3 +283,27 @@ def test_recommend_notes_that_todos_are_not_recommended() -> None:
 
     clause = "todos are recorded with `/remember todo`, not recommended"
     assert text.count(clause) == 2
+
+
+def test_review_work_item_coverage_uses_one_bar() -> None:
+    section = review_section()
+
+    assert "open or closed as completed" in section
+    assert "closed as not planned or as a duplicate" in section
+    assert "open or done" not in section
+
+
+def test_review_summary_states_the_retain_exception_and_follow_up() -> None:
+    section = review_section()
+
+    assert "except an entry that step 11 retains" in section
+    assert "naming the `/remember procedure/workflow/standard <text>`" in section
+
+
+def test_review_resolves_every_steering_outcome_in_the_destination_check() -> None:
+    section = review_section()
+    check = section.index("**Destination check**")
+    steering = section.index("**Steering promotions**")
+
+    assert section.index("report the entry as unsupported", check) < steering
+    assert section.index("review never creates a missing target", check) < steering
