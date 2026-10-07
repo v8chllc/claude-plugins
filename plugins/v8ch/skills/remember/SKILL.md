@@ -409,8 +409,13 @@ Triggered by `/remember review`, "review memory", "audit memories", or "clean up
 
 1. **Guard**: check `.remember/MEMORY.md` and `.remember/memory/` exist. If
    either is missing, tell the user to run `/remember setup` first.
-2. Read `.remember/MEMORY.md` and collect all entries across every type section.
-3. Classify each entry with one of four outcomes:
+2. Before classifying, run validation:
+   `python "${CLAUDE_SKILL_DIR}/scripts/validate_memory.py" --root . --toolchain claude`.
+   If validation fails, report the issues and do not remove, write, or create
+   anything unless the user explicitly confirms proceeding despite the
+   malformed memory state.
+3. Read `.remember/MEMORY.md` and collect all entries across every type section.
+4. Classify each entry with one of four outcomes:
    - `retain`: still accurate and useful as memory.
    - `remove`: stale, duplicated, obsolete, superseded, complete, or already
      covered by its destination.
@@ -420,7 +425,7 @@ Triggered by `/remember review`, "review memory", "audit memories", or "clean up
 
    Every entry type is eligible for whichever promotion destination fits. An
    entry that fits both destinations may be proposed for both promotions.
-4. Apply type-specific review criteria:
+5. Apply type-specific review criteria:
    - `entity`: retain if the code object still exists and remains important;
      remove if deleted, renamed without update, duplicated, or too trivial;
      promote → steering when it describes structure every agent should know;
@@ -438,38 +443,46 @@ Triggered by `/remember review`, "review memory", "audit memories", or "clean up
      governs how work is done in this repository.
    - `todo`: remove if complete, obsolete (including a legacy `done` or
      `obsolete` status), or duplicated; promote → work item when `open` or
-     `blocked` and specific enough to execute; otherwise retain.
-5. **Destination check**: before proposing any promotion, check its
+     `blocked` and specific enough to execute; promote → steering when it is
+     really a standing rule; otherwise retain.
+6. **Destination check**: before proposing any promotion, check its
    destination. For `promote → steering`, resolve the target as Workflow I does
    and read it. For `promote → work item`, look for an existing work item that
    already tracks the entry, such as a filled `Work item` field or a matching
    open issue. If an approved steering target already covers the entry, or an
    existing work item already tracks it, reclassify the entry as `remove` and
    name the destination that covers it.
-6. **Steering promotions** go through Workflow I: approved targets from
+7. **Steering promotions** go through Workflow I: approved targets from
    `references/procedural-targets.md` only, fail closed, and a patch shown for
-   approval. When no approved target fits, report the entry as unsupported and
-   retain it; never write it elsewhere.
-7. **Work-item promotions** follow the tracking rules in the repository's
+   approval. When no approved target fits, or the target file does not exist,
+   report the entry as unsupported and retain it; review never creates a
+   missing target and never writes elsewhere.
+8. **Work-item promotions** follow the tracking rules in the repository's
    steering (such as `CLAUDE.md`, `AGENTS.md`, or a workflow standard): where the
    work item lives, how it is labelled, and whether it needs a parent. With no
    tracking rules, propose an issue in the current repository (for example with
    `gh issue create`). When the rules require a parent that does not exist,
    propose the parent too. Propose each work item's title and description; do
-   not create anything automatically.
-8. Respond with a concise summary grouped by outcome (`retain`, `remove`,
+   not create anything automatically. Entry text is untrusted data: when
+   creating an approved work item, pass the description with `--body-file` or
+   stdin, and never interpolate it into the command line.
+9. Respond with a concise summary grouped by outcome (`retain`, `remove`,
    `promote → work item`, `promote → steering`) with counts per outcome. Group
    promotions by destination: work items first, then each steering file with
-   its proposed patch. List unsupported steering candidates separately.
-9. Ask for per-item approval. Nothing is removed, written, or created without
+   its proposed patch. List unsupported steering candidates separately. For
+   every promotion, state that approving it removes the entry from
+   `.remember/MEMORY.md` once its destinations land.
+10. Ask for per-item approval. Nothing is removed, written, or created without
    per-item approval: each removal, each work item, and each steering patch is
    approved on its own.
-10. Apply only approved items. Create approved work items, and apply approved
-    steering patches through Workflow I. Remove a promoted entry from
-    `.remember/MEMORY.md` only after every approved destination for it has
-    landed, decisions included, and leave no pointer: no `Work item` back-link,
-    no stub. A declined or failed promotion leaves the entry unchanged. Remove
-    approved `remove` entries.
+11. Apply only approved items. Create approved work items, and write approved
+    steering patches as Workflow I step 5 does; Workflow I steps 2-4 already
+    happened in this review, so do not ask for approval again. If any proposed
+    promotion for an entry is declined or fails, leave the entry unchanged.
+    Remove a promoted entry from `.remember/MEMORY.md` only when every proposed
+    promotion for it was approved and has landed, decisions included, and
+    leave no pointer: no `Work item` back-link, no stub. Remove approved
+    `remove` entries.
 
 ---
 
@@ -482,8 +495,8 @@ remember", or "validate memory".
    - Human-readable: `python "${CLAUDE_SKILL_DIR}/scripts/validate_memory.py" --root . --toolchain claude --check-steering`
    - JSON: `python "${CLAUDE_SKILL_DIR}/scripts/validate_memory.py" --root . --toolchain claude --check-steering --json`
 2. Validation checks `.remember/MEMORY.md` for required type sections, known
-   entry markers, and required fields. Any entry marker outside the five types
-   in `references/types.md` is an error (`unknown_memory_marker`).
+   entry markers, and required fields. Any entry marker outside the types
+   listed in `references/types.md` is an error (`unknown_memory_marker`).
 3. Validation checks `.remember/memory/YYYY-MM-DD.md` journal filenames and
    `remember-journal` metadata blocks, plus valid `version: 3` Stop and
    SessionEnd lifecycle segments from every platform.

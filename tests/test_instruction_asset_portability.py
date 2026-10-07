@@ -59,7 +59,7 @@ def test_memory_skills_use_installed_plugin_paths_for_validation() -> None:
     remember = (PLUGIN_DIR / "skills/remember/SKILL.md").read_text(encoding="utf-8")
     recommend = (PLUGIN_DIR / "skills/recommend/SKILL.md").read_text(encoding="utf-8")
 
-    assert remember.count("${CLAUDE_SKILL_DIR}/scripts/validate_memory.py") == 7
+    assert remember.count("${CLAUDE_SKILL_DIR}/scripts/validate_memory.py") == 8
     assert (
         recommend.count(
             "${CLAUDE_PLUGIN_ROOT}/skills/remember/scripts/validate_memory.py"

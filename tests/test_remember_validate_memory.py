@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -216,7 +217,8 @@ Status:
 
 def test_validator_source_has_no_legacy_type() -> None:
     """The validator carries no constant, function, field, or code for the type."""
-    assert LEGACY_TYPE not in SCRIPT.read_text(encoding="utf-8")
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert not re.search(rf"\b{LEGACY_TYPE}\b", source)
 
 
 def test_bad_journal_filename_and_missing_metadata_are_reported(

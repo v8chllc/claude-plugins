@@ -133,7 +133,7 @@ Status: <open | blocked>
 Next action: <specific next step>
 Owner: <optional>
 Created: <YYYY-MM-DD>
-Work item: <optional link/id if created>
+Work item: <legacy; leave empty — promotion removes the todo>
 ```
 
 Examples:
