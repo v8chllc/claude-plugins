@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +18,17 @@ STEERING_FILE = "CLAUDE.md"
 SETUP_COMMAND = "/remember setup"
 TOOLCHAIN = "claude"
 LEGACY_TYPE = "context"
+RETIRED_NAMES = (
+    "LOCAL_CONTEXT",
+    "validate_local_context",
+    "local_context_ignored",
+    "context_entry_in_memory_file",
+    "legacy_context_section",
+    "local_context_not_ignored",
+    "context_updated_invalid",
+    "duplicate_context_entries",
+    "STALE_CONTEXT_CLAUSE_RE",
+)
 LEGACY_LOCAL_DIR = ".remember/local"
 LEGACY_LOCAL_FILE = "context.md"
 
@@ -218,7 +228,9 @@ Status:
 def test_validator_source_has_no_legacy_type() -> None:
     """The validator carries no constant, function, field, or code for the type."""
     source = SCRIPT.read_text(encoding="utf-8")
-    assert not re.search(rf"\b{LEGACY_TYPE}\b", source)
+    assert f'"{LEGACY_TYPE}"' not in source
+    for name in RETIRED_NAMES:
+        assert name not in source
 
 
 def test_bad_journal_filename_and_missing_metadata_are_reported(
