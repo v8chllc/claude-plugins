@@ -207,9 +207,10 @@ def test_memory_type_lists_agree() -> None:
     triggers = skill[start : skill.index("**Record — natural language", start)]
     assert re.findall(r"`/remember (\w+) <", triggers) == types
     opening = TYPES_PATH.read_text("utf-8").split("---", 1)[0]
-    # Pinned exactly so a type count cannot return in any wording.
+    # The whole opening is pinned so a type count cannot return in any wording.
     sentence = "Each type below is curated memory in `.remember/MEMORY.md`."
-    assert normalized(opening).startswith(f"# Memory Types {sentence} ")
+    expected = f"# Memory Types {sentence} Use these templates when writing entries."
+    assert normalized(opening) == expected
 
 
 def test_todo_template_marks_work_item_legacy() -> None:
