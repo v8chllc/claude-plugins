@@ -282,6 +282,17 @@ def validator(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     return load_validator(monkeypatch)
 
 
+def modules_beside_validator() -> set[str]:
+    """Return the loaded modules whose file sits beside the validator."""
+    folder = VALIDATOR_PATH.parent.resolve()
+    return {
+        name
+        for name, module in sys.modules.items()
+        if (file := getattr(module, "__file__", None))
+        and Path(file).resolve().parent == folder
+    }
+
+
 @pytest.mark.parametrize("preloaded", [False, True], ids=["absent", "preloaded"])
 def test_validator_load_restores_sys_modules_and_sys_path(
     monkeypatch: pytest.MonkeyPatch, preloaded: bool
@@ -294,9 +305,13 @@ def test_validator_load_restores_sys_modules_and_sys_path(
     names = ("validate_memory", "lifecycle_segments")
     saved = {name: sys.modules.get(name) for name in names}
     path = list(sys.path)
+    beside = modules_beside_validator()
 
     with pytest.MonkeyPatch.context() as inner:
         assert load_validator(inner).MEMORY_TYPES
+
+    # A sibling import beyond `names` would leak here, whatever its name.
+    assert modules_beside_validator() == beside
 
     for name in names:
         assert sys.modules.get(name) is saved[name], f"{name} not restored"
@@ -472,6 +487,16 @@ def test_review_fills_the_body_file_without_shell_expansion() -> None:
     assert "never an unquoted one" in section
 
 
+def test_review_keeps_work_item_files_out_of_the_tree_and_shell() -> None:
+    section = review_section()
+
+    assert "write any title file by the same file-edit tool or quoted heredoc" in (
+        section
+    )
+    assert "outside the repository, or at a temporary path that is removed" in (section)
+    assert "after `gh issue create`" in section
+
+
 def test_review_allows_reading_how_a_work_item_closed() -> None:
     section = review_section()
 
@@ -501,3 +526,36 @@ def test_review_untrusted_rule_excepts_the_validated_parts() -> None:
         r"allowed in step (\d+)",
         section,
     ) == [review_step_number("Destination check")]
+
+
+def work_item_bullet() -> str:
+    section = review_section()
+    start = section.index("**Work item.**")
+    return section[start : section.index("**Combining.**", start)]
+
+
+def test_review_work_item_bullet_is_split_into_parse_look_up_covered() -> None:
+    review = workflow_block(REVIEW_HEADING)
+    for label in ("**Parse.**", "**Look up.**", "**Covered.**"):
+        assert re.search(rf"(?m)^ {{5}}- {re.escape(label)}", review), label
+    bullet = work_item_bullet()
+
+    # The repository for a `#N` value is fixed in Parse, before any lookup.
+    assert bullet.index("**Parse.**") < bullet.index("from the current checkout")
+    assert bullet.index("from the current checkout") < bullet.index("**Look up.**")
+    assert bullet.index("**Look up.**") < bullet.index("**Covered.**")
+    assert bullet.index("issue view N --repo owner/repo") > bullet.index("**Look up.**")
+
+
+def test_review_names_the_repository_a_short_reference_resolves_against() -> None:
+    bullet = work_item_bullet()
+
+    assert "`gh repo view --json nameWithOwner` reports" in bullet
+    assert "resolved `owner/repo#N` beside the original value" in bullet
+
+
+def test_review_reports_legacy_closed_items_and_json_errors() -> None:
+    bullet = work_item_bullet()
+
+    assert "A `gh` error on `--json` counts as not resolving" in bullet
+    assert "names each closed item with an empty `stateReason`" in bullet
