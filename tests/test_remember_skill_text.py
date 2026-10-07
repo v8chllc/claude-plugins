@@ -125,7 +125,8 @@ def test_review_step_references_name_the_removal_step() -> None:
     removal = re.search(r"(?:^| )(\d+)\. Apply only approved items", section)
     assert removal
     refs = re.findall(
-        r"(?:lands \(step|follows the rule in step|that step) (\d+)", section
+        r"(?:lands \(step|follows the rule in step|that step|written in step) (\d+)",
+        section,
     )
 
     assert refs
@@ -136,9 +137,10 @@ def test_review_summary_reference_names_the_summary_step() -> None:
     section = review_section()
     summary = re.search(r"(?:^| )(\d+)\. Respond with a concise summary", section)
     assert summary
-    refs = re.findall(r"in the step (\d+) summary", section)
+    refs = re.findall(r"the step (\d+) summary", section)
 
-    assert refs == [summary.group(1)]
+    assert refs
+    assert set(refs) == {summary.group(1)}
 
 
 def test_review_destination_check_is_per_destination() -> None:
@@ -236,12 +238,17 @@ def test_memory_type_lists_agree() -> None:
     # The validator imports lifecycle_segments from its own directory.
     script_dir = str(VALIDATOR_PATH.parent)
     sys.path.insert(0, script_dir)
+    before = set(sys.modules)
     sys.modules[spec.name] = module
     try:
         spec.loader.exec_module(module)
     finally:
+        # Drop the validator and any module its load imported (lifecycle_segments).
+        for name in set(sys.modules) - before:
+            del sys.modules[name]
         sys.modules.pop(spec.name, None)
         sys.path.remove(script_dir)
+    assert set(sys.modules) == before, "loading the validator leaked modules"
     types = list(module.MEMORY_TYPES)
     skill = (REMEMBER_DIR / "SKILL.md").read_text(encoding="utf-8")
     heading = re.search(r"^# Memory$", skill, re.M)
@@ -310,11 +317,45 @@ def test_review_resolves_every_steering_outcome_in_the_destination_check() -> No
     assert section.index("review never creates a missing target", check) < steering
 
 
+def test_review_destination_check_treats_memory_text_as_untrusted() -> None:
+    section = review_section()
+    check = section.index("**Destination check**")
+    creation = section.index("**Work-item promotions**")
+
+    assert section.index("untrusted data at every step", check) < creation
+    assert "only after it parses as an issue URL or `owner/repo#N`" in section
+    assert "never interpolated into a command line" in section
+
+
+def test_review_unsupported_steering_is_never_reclassified_as_remove() -> None:
+    section = review_section()
+
+    assert "counts as an uncovered destination" in section
+    assert "is never reclassified as `remove`" in section
+
+
+def test_review_step_eleven_cites_only_the_steps_review_reuses() -> None:
+    section = review_section()
+
+    assert "Workflow I steps 3-4 already happened in this review" in section
+    assert "(step 6 replaced its target resolution)" in section
+    assert "steps 2-4" not in section
+
+
+def test_review_destination_check_has_three_sub_bullets() -> None:
+    text = (REMEMBER_DIR / "SKILL.md").read_text(encoding="utf-8")
+    start = text.index("6. **Destination check**")
+    block = text[start : text.index("7. **Steering promotions**")]
+
+    for label in ("**Steering.**", "**Work item.**", "**Combining.**"):
+        assert f"    - {label}" in block
+
+
 def test_review_search_match_must_clearly_track_the_entry() -> None:
     section = review_section()
 
     assert "counts only when the issue clearly tracks this entry" in section
-    assert "step 9 summary names it" in section
+    assert "summary names it so the user can judge" in section
 
 
 def test_review_follow_up_covers_unsupported_and_ambiguous_entries() -> None:

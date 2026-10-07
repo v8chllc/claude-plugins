@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -229,6 +230,8 @@ def test_validator_source_has_no_legacy_type() -> None:
     """The validator carries no constant, function, field, or code for the type."""
     source = SCRIPT.read_text(encoding="utf-8")
     assert f'"{LEGACY_TYPE}"' not in source
+    # Letter-bounded, so CONTEXT_MARKER is caught but contextlib is not.
+    assert not re.search(rf"(?<![a-z]){LEGACY_TYPE}(?![a-z])", source, re.I)
     for name in RETIRED_NAMES:
         assert name not in source
 
