@@ -42,27 +42,24 @@ def memory_skill_assets() -> list[Path]:
     return sorted(path for path in assets if path != LEGACY_DIRECTIVE)
 
 
-def script_dir_modules(before: set[str]) -> list[str]:
-    """Return modules added since `before` that came from the validator's directory."""
-    script_dir = VALIDATOR_PATH.parent
-    added = []
-    for name, module in list(sys.modules.items()):
-        if name in before:
-            continue
-        origin = getattr(module, "__file__", None)
-        if name == "validate_memory" or (
-            origin and Path(origin).resolve().is_relative_to(script_dir)
-        ):
-            added.append(name)
-    return added
+def workflow_block(heading: str) -> str:
+    """Return one SKILL.md workflow, heading through the next separator."""
+    text = (REMEMBER_DIR / "SKILL.md").read_text(encoding="utf-8")
+    start = text.index(heading)
+    return text[start : text.index("\n---\n", start)]
 
 
 def review_section() -> str:
-    """Return the remember review workflow, heading through the next separator."""
-    text = (REMEMBER_DIR / "SKILL.md").read_text(encoding="utf-8")
-    start = text.index(REVIEW_HEADING)
-    end = text.index("\n---\n", start)
-    return normalized(text[start:end])
+    """Return the remember review workflow, wrapping collapsed."""
+    return normalized(workflow_block(REVIEW_HEADING))
+
+
+def review_step_number(label: str) -> str:
+    """Return the number of the review step whose bold label is `label`."""
+    block = workflow_block(REVIEW_HEADING)
+    found = re.search(rf"(?m)^(\d+)\. \*\*{re.escape(label)}\*\*", block)
+    assert found, f"Workflow J has no step labelled {label}"
+    return found.group(1)
 
 
 def test_todo_status_is_open_or_blocked_only() -> None:
@@ -141,7 +138,7 @@ def test_review_step_references_name_the_removal_step() -> None:
     removal = re.search(r"(?:^| )(\d+)\. Apply only approved items", section)
     assert removal
     refs = re.findall(
-        r"(?:lands \(step|follows the rule in step|that step|written in step) (\d+)",
+        r"(?:lands \(step|follows the rule in step|that step|applied in step) (\d+)",
         section,
     )
 
@@ -201,10 +198,28 @@ def test_review_runs_validation_before_classifying() -> None:
     assert section.index("validate_memory.py") < section.index("Classify each entry")
 
 
-def test_review_delegates_steering_writes_to_named_steps() -> None:
+def workflow_i_step(number: int) -> str:
+    """Return the text of one numbered step of Workflow I."""
+    block = workflow_block("## Workflow I: Procedural Write")
+    steps = re.split(r"(?m)^(?=\d+\. )", block)
+    found = [x for x in steps if x.startswith(f"{number}. ")]
+    assert found, f"Workflow I has no step {number}"
+    return normalized(found[0])
+
+
+def test_review_cites_workflow_i_steps_that_say_what_review_reuses() -> None:
     section = review_section()
 
-    assert "Workflow I step 5 does" in section
+    dedupe = re.search(
+        r"Workflow I's dedupe and patch format \(steps (\d+)-(\d+)\)", section
+    )
+    write = re.search(r"its write step \(step (\d+)\)", section)
+    resolution = re.search(r"Workflow I's target resolution \(step (\d+)\)", section)
+    assert dedupe and write and resolution
+    assert "Check for duplication" in workflow_i_step(int(dedupe.group(1)))
+    assert "patch" in workflow_i_step(int(dedupe.group(2)))
+    assert "write the change" in workflow_i_step(int(write.group(1)))
+    assert "resolve to an approved target" in workflow_i_step(int(resolution.group(1)))
 
 
 def test_review_passes_work_item_text_by_file() -> None:
@@ -213,8 +228,9 @@ def test_review_passes_work_item_text_by_file() -> None:
     assert "`--body-file`" in section
     assert "title and description both derive from it" in section
     assert "fresh summary of your own that is never copied from the entry" in section
-    assert "Keep shell metacharacters (backticks, `$`, quotes) out of the title" in (
-        section
+    assert (
+        "Keep shell metacharacters (backticks, `$`, quotes, backslash) out of the title"
+        in (section)
     )
     assert "single-quoted" not in section
 
@@ -235,9 +251,7 @@ def test_memory_skill_assets_are_found() -> None:
 
 
 def test_review_two_digit_steps_use_four_space_continuations() -> None:
-    text = (REMEMBER_DIR / "SKILL.md").read_text(encoding="utf-8")
-    start = text.index(REVIEW_HEADING)
-    lines = text[start : text.index("\n---\n", start)].splitlines()
+    lines = workflow_block(REVIEW_HEADING).splitlines()
     first = next((i for i, x in enumerate(lines) if x.startswith("10. ")), None)
     assert first is not None, "Workflow J has no step 10"
     block = [x for x in lines[first + 1 :] if not re.match(r"\d+\. ", x)]
@@ -246,39 +260,51 @@ def test_review_two_digit_steps_use_four_space_continuations() -> None:
     assert all(x.startswith("    ") for x in block if x.strip())
 
 
-def test_memory_type_lists_agree() -> None:
+def load_validator(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    """Load the validator; `monkeypatch` restores `sys.modules` and `sys.path`."""
     spec = importlib.util.spec_from_file_location("validate_memory", VALIDATOR_PATH)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
-    # The validator imports lifecycle_segments from its own directory.
-    script_dir = str(VALIDATOR_PATH.parent)
-    sys.path.insert(0, script_dir)
-    before = set(sys.modules)
-    # Snapshot any pre-existing entries so a registering test elsewhere is
-    # restored, and so the check below covers only names this load added.
-    saved: dict[str, ModuleType] = {
-        n: sys.modules[n]
-        for n in ("validate_memory", "lifecycle_segments")
-        if n in before
-    }
-    sys.modules[spec.name] = module
-    try:
-        spec.loader.exec_module(module)
-        loaded = script_dir_modules(before - {"validate_memory"})
-    finally:
-        # Drop the validator and the script-dir modules its load imported
-        # (lifecycle_segments), but never a stdlib module it happened to load.
-        for name in script_dir_modules(before - {"validate_memory"}):
-            del sys.modules[name]
-        sys.modules.pop("validate_memory", None)
-        sys.modules.update(saved)
-        sys.path.remove(script_dir)
-    assert {"validate_memory", "lifecycle_segments"} - set(saved) <= set(loaded)
-    for name in ("validate_memory", "lifecycle_segments"):
-        if name in saved:
-            assert sys.modules[name] is saved[name], f"{name} not restored"
-        else:
-            assert name not in sys.modules, f"{name} leaked"
+    # The Claude validator imports lifecycle_segments from its own directory.
+    monkeypatch.syspath_prepend(str(VALIDATOR_PATH.parent))
+    # delitem records nothing for an absent key, so setitem first records the
+    # current entry, or its absence, for pytest to restore after the load.
+    monkeypatch.setitem(sys.modules, "lifecycle_segments", ModuleType("placeholder"))
+    monkeypatch.delitem(sys.modules, "lifecycle_segments")
+    monkeypatch.setitem(sys.modules, spec.name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def validator(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    """Load the validator for one test."""
+    return load_validator(monkeypatch)
+
+
+@pytest.mark.parametrize("preloaded", [False, True], ids=["absent", "preloaded"])
+def test_validator_load_restores_sys_modules_and_sys_path(
+    monkeypatch: pytest.MonkeyPatch, preloaded: bool
+) -> None:
+    # The outer monkeypatch sets the starting state and cleans up after it.
+    sibling = ModuleType("lifecycle_segments")
+    monkeypatch.setitem(sys.modules, "lifecycle_segments", sibling)
+    if not preloaded:
+        monkeypatch.delitem(sys.modules, "lifecycle_segments")
+    names = ("validate_memory", "lifecycle_segments")
+    saved = {name: sys.modules.get(name) for name in names}
+    path = list(sys.path)
+
+    with pytest.MonkeyPatch.context() as inner:
+        assert load_validator(inner).MEMORY_TYPES
+
+    for name in names:
+        assert sys.modules.get(name) is saved[name], f"{name} not restored"
+    assert sys.path == path
+
+
+def test_memory_type_lists_agree(validator: ModuleType) -> None:
+    module = validator
     types = list(module.MEMORY_TYPES)
     skill = (REMEMBER_DIR / "SKILL.md").read_text(encoding="utf-8")
     heading = re.search(r"^# Memory$", skill, re.M)
@@ -333,8 +359,7 @@ def test_review_work_item_coverage_uses_one_bar() -> None:
 def test_review_summary_states_the_retain_exception_and_follow_up() -> None:
     section = review_section()
 
-    assert "except an entry that step" in section
-    assert " retains." in section
+    assert re.search(r"except an entry that step \d+ retains\.", section)
     assert "naming the `/remember procedure/workflow/standard <text>`" in section
 
 
@@ -355,21 +380,18 @@ def test_review_destination_check_treats_memory_text_as_untrusted() -> None:
     assert "`https://github.com/<owner>/<repo>/issues/<N>` URL, `owner/repo#N`" in (
         section
     )
-    assert "`#N` or bare digits" in section
+    assert "`owner/repo#N`, `#N` or bare digits; any other value counts as absent" in (
+        section
+    )
     assert "take the repository from the current checkout, never from the field" in (
         section
     )
     assert "For a parsed `Work item` value, pass `gh` only" in section
-    assert "any other value counts as absent" in section
     assert "start with an alphanumeric character" in section
     assert "contain only `[A-Za-z0-9._-]`" in section
     assert "`issue view N --repo owner/repo` built from the parsed parts" in section
     assert "never the original field" in section
     assert "Search with keywords of your own, never copied from the entry" in section
-    assert "never have them interpolated into a command line" in section
-    assert "separate quoted arguments" not in section
-    # The rule is worded once, at the top; step 8 points back to it.
-    assert "never interpolate" not in section
 
 
 def test_review_unsupported_steering_is_never_reclassified_as_remove() -> None:
@@ -386,7 +408,6 @@ def test_review_covered_ambiguous_steering_is_not_an_uncovered_target() -> None:
         "An unsupported target, or an ambiguous one that no candidate already "
         "covers, is an uncovered steering target" in section
     )
-    assert "unsupported or ambiguous steering candidate" not in section
     # Combining, the step 9 summary and step 11 each use the one defined term.
     assert "An uncovered steering target counts as an uncovered destination" in section
     assert "List uncovered steering targets" in section
@@ -396,26 +417,22 @@ def test_review_covered_ambiguous_steering_is_not_an_uncovered_target() -> None:
 def test_review_step_eleven_cites_only_the_steps_review_reuses() -> None:
     section = review_section()
 
-    assert "Workflow I steps 3-4 already happened in this review" in section
-    assert "steps 2-4" not in section
-    destination = re.search(
-        r"(?m)^(\d+)\. \*\*Destination check\*\*",
-        (REMEMBER_DIR / "SKILL.md").read_text(encoding="utf-8"),
-    )
-    assert destination
+    destination = review_step_number("Destination check")
+    steering = review_step_number("Steering promotions")
     cited = re.findall(
         r"this review's step (\d+), the destination check, replaced", section
     )
-    assert cited == [destination.group(1)]
+    assert cited == [destination]
+    assert re.findall(r"steering patches as step (\d+) describes", section) == [
+        steering
+    ]
 
 
 def test_review_destination_check_has_three_sub_bullets() -> None:
-    text = (REMEMBER_DIR / "SKILL.md").read_text(encoding="utf-8")
-    destination = re.search(r"(?m)^\d+\. \*\*Destination check\*\*", text)
-    assert destination
-    following = re.search(r"(?m)^\d+\. ", text[destination.end() :])
-    assert following
-    block = text[destination.start() : destination.end() + following.start()]
+    review = workflow_block(REVIEW_HEADING)
+    number = review_step_number("Destination check")
+    steps = re.split(r"(?m)^(?=\d+\. )", review)
+    block = next(x for x in steps if x.startswith(f"{number}. "))
 
     for label in ("**Steering.**", "**Work item.**", "**Combining.**"):
         assert re.search(rf"(?m)^ +- {re.escape(label)}", block), label
@@ -424,7 +441,7 @@ def test_review_destination_check_has_three_sub_bullets() -> None:
 def test_review_search_match_must_clearly_track_the_entry() -> None:
     section = review_section()
 
-    assert "counts only when the issue clearly tracks this entry" in section
+    assert "count only when the issue clearly tracks this entry" in section
     assert "summary names it so the user can judge" in section
 
 
@@ -432,7 +449,6 @@ def test_review_follow_up_covers_each_uncovered_steering_target() -> None:
     section = review_section()
 
     assert "follow-up for each uncovered steering target" in section
-    assert "each unsupported and each ambiguous entry" not in section
 
 
 def test_review_reads_ambiguous_candidates_before_listing_them() -> None:
@@ -440,3 +456,48 @@ def test_review_reads_ambiguous_candidates_before_listing_them() -> None:
 
     assert "read each candidate target" in section
     assert "steering destination is covered" in section
+
+
+def test_review_fills_the_body_file_without_shell_expansion() -> None:
+    section = review_section()
+
+    assert (
+        "filled by the file-edit tool or a quoted heredoc (`<<'<random-token>'`)"
+        in section
+    )
+    assert "<<'TOKEN'" not in section
+    assert "delimiter is a random token that appears as no line of the body" in (
+        section
+    )
+    assert "never an unquoted one" in section
+
+
+def test_review_allows_reading_how_a_work_item_closed() -> None:
+    section = review_section()
+
+    assert "add `--json state,stateReason` to read how it closed" in section
+    assert "a closed item whose `stateReason` is empty or unknown" in section
+    assert "an empty or unknown `stateReason` counts as absent" not in section
+    assert "Read a search match the same way, with `--json state,stateReason`" in (
+        section
+    )
+
+
+def test_review_checks_short_work_item_values_for_relevance() -> None:
+    section = review_section()
+
+    assert (
+        "and a `#N` or bare-digit value, which may point at an unrelated issue "
+        "in the current checkout, count only when the issue clearly tracks "
+        "this entry" in section
+    )
+
+
+def test_review_untrusted_rule_excepts_the_validated_parts() -> None:
+    section = review_section()
+
+    assert re.findall(
+        r"interpolated into a command line, except the validated parts "
+        r"allowed in step (\d+)",
+        section,
+    ) == [review_step_number("Destination check")]
