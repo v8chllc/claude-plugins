@@ -111,7 +111,10 @@ def test_review_removes_promoted_entries_without_a_pointer() -> None:
 
     assert "only when every proposed promotion for it was approved" in section
     assert "If any proposed promotion for an entry is declined or fails" in section
-    assert "under the removal rule in step 11" in section
+    assert (
+        "once every promotion proposed for it is approved and lands (step 11)"
+        in section
+    )
     assert "decisions included" in section
     assert "leave no pointer" in section
     assert "leave the entry unchanged" in section
@@ -200,9 +203,12 @@ def test_memory_type_lists_agree() -> None:
     assert re.findall(r"`(\w+)`", workflow_d.group(1)) == types
     # The Record trigger lists in remember and recommend's candidate list are
     # prose; only the remember slash-command triggers are checked here.
-    triggers = skill[skill.index("**Record — slash command:**") :]
-    assert all(f"/remember {t} <" in triggers for t in types)
-    assert not re.search(r"\b\w+ structured types", TYPES_PATH.read_text("utf-8"), re.I)
+    start = skill.index("**Record — slash command:**")
+    triggers = skill[start : skill.index("**Record — natural language", start)]
+    assert re.findall(r"`/remember (\w+) <", triggers) == types
+    opening = TYPES_PATH.read_text("utf-8").split("---", 1)[0]
+    count = r"\b(\d+|one|two|three|four|five|six|seven)\s+(\w+\s+)?types?\b"
+    assert re.search(count, opening, re.I) is None
 
 
 def test_todo_template_marks_work_item_legacy() -> None:
@@ -210,3 +216,10 @@ def test_todo_template_marks_work_item_legacy() -> None:
 
     assert "Work item: <legacy; leave empty" in text
     assert "<optional link/id if created>" not in text
+
+
+def test_recommend_notes_that_todos_are_not_recommended() -> None:
+    text = normalized((SKILLS_DIR / "recommend/SKILL.md").read_text(encoding="utf-8"))
+
+    clause = "todos are recorded with `/remember todo`, not recommended"
+    assert text.count(clause) == 2

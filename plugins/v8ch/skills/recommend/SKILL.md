@@ -32,7 +32,7 @@ Triggered by `/recommend curated`.
 1. **Guard**: check `.remember/MEMORY.md` and `.remember/memory/` exist. If
    either is missing, tell the user to run `/remember setup` first.
 2. Review current session context.
-3. Identify durable curated candidates:
+3. Identify durable curated candidates (todos are recorded with `/remember todo`, not recommended):
    - `decision`: explicit technical or workflow choices and their rationale.
    - `error`: failure modes, fixes, gotchas, or validation issues discovered.
    - `preference`: repeated or explicit user working preferences.
@@ -62,7 +62,7 @@ Triggered by `/recommend session`.
 3. Internally read `.remember/MEMORY.md`, the captured journal entry, and full
    session context for recommendation quality. Do not present this as a
    user-facing manual load operation.
-4. Identify curated candidates (entity, decision, error, preference) and procedural candidates (workflow lessons, coding/arch standards, skill/tool routines).
+4. Identify curated candidates (entity, decision, error, preference; todos are recorded with `/remember todo`, not recommended) and procedural candidates (workflow lessons, coding/arch standards, skill/tool routines).
 5. Resolve each procedural candidate to an approved target from `../remember/references/procedural-targets.md`. If no target fits, mark as unsupported.
 6. Dedupe curated candidates against `.remember/MEMORY.md`; dedupe procedural candidates against their respective target files.
 7. Present recommendations grouped by target and action: `add`, `update`, `skip`. List unsupported procedural candidates separately with a note.

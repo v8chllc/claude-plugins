@@ -473,7 +473,8 @@ Triggered by `/remember review`, "review memory", "audit memories", or "clean up
    promotions by destination: work items first, then each steering file with
    its proposed patch. List unsupported steering candidates separately. For
    every promotion, state that the promoted entry is removed from
-   `.remember/MEMORY.md` under the removal rule in step 11.
+   `.remember/MEMORY.md` once every promotion proposed for it is approved and
+   lands (step 11).
 10. Ask for per-item approval. Nothing is removed, written, or created without
     per-item approval: each `remove` entry, each work item, and each steering
     patch is approved on its own; a promoted entry's removal follows the rule
