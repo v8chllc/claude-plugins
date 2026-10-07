@@ -1,6 +1,8 @@
 """Stable-phrase guards for the remember and recommend skill instructions."""
 
+import importlib.util
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -93,7 +95,7 @@ def test_review_checks_the_destination_before_proposing() -> None:
     section = review_section()
 
     assert "**Destination check**: before proposing any promotion" in section
-    assert "reclassify the entry as `remove`" in section
+    assert "Reclassify the entry as `remove`" in section
 
 
 def test_review_routes_promotions_through_their_write_paths() -> None:
@@ -111,14 +113,55 @@ def test_review_removes_promoted_entries_without_a_pointer() -> None:
 
     assert "only when every proposed promotion for it was approved" in section
     assert "If any proposed promotion for an entry is declined or fails" in section
-    assert (
-        "once every promotion proposed for it is approved and lands (step 11)"
-        in section
-    )
+    assert "is approved and lands (step " in section
     assert "decisions included" in section
     assert "leave no pointer" in section
     assert "leave the entry unchanged" in section
     assert "update `todo` entries with the `Work item` field" not in section
+
+
+def test_review_step_references_name_the_removal_step() -> None:
+    section = review_section()
+    removal = re.search(r"(?:^| )(\d+)\. Apply only approved items", section)
+    assert removal
+    refs = re.findall(r"(?:lands \(step|follows the rule in step) (\d+)", section)
+
+    assert len(refs) == 2
+    assert set(refs) == {removal.group(1)}
+
+
+def test_review_summary_reference_names_the_summary_step() -> None:
+    section = review_section()
+    summary = re.search(r"(?:^| )(\d+)\. Respond with a concise summary", section)
+    assert summary
+    refs = re.findall(r"in the step (\d+) summary", section)
+
+    assert refs == [summary.group(1)]
+
+
+def test_review_destination_check_is_per_destination() -> None:
+    section = review_section()
+
+    assert "Check each destination separately" in section
+    assert "only when every destination that fits it is already covered" in section
+    assert "treat it as absent" in section
+    assert "list the entry with its candidate targets" in section
+
+
+def test_review_retains_entries_with_unsupported_steering_candidates() -> None:
+    section = review_section()
+
+    assert (
+        "Retain an entry that has an unsupported or ambiguous steering candidate"
+        in section
+    )
+
+
+def test_review_flags_more_public_work_item_destinations() -> None:
+    section = review_section()
+
+    assert "more public than the current repository" in section
+    assert "leave private detail from the entry out of its description" in section
 
 
 def test_review_summary_groups_and_needs_per_item_approval() -> None:
@@ -159,7 +202,7 @@ def test_review_step_ten_covers_promoted_entry_removal() -> None:
     section = review_section()
 
     assert "each `remove` entry, each work item, and each steering patch" in section
-    assert "a promoted entry's removal follows the rule in step 11" in section
+    assert "a promoted entry's removal follows the rule in step " in section
 
 
 def test_review_todo_can_promote_to_steering() -> None:
@@ -183,10 +226,19 @@ def test_review_two_digit_steps_use_four_space_continuations() -> None:
 
 
 def test_memory_type_lists_agree() -> None:
-    source = VALIDATOR_PATH.read_text("utf-8")
-    match = re.search(r"MEMORY_TYPES = \((.*?)\)", source, re.S)
-    assert match
-    types = re.findall(r'"([a-z]+)"', match.group(1))
+    spec = importlib.util.spec_from_file_location("validate_memory", VALIDATOR_PATH)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    # The validator imports lifecycle_segments from its own directory.
+    script_dir = str(VALIDATOR_PATH.parent)
+    sys.path.insert(0, script_dir)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop(spec.name, None)
+        sys.path.remove(script_dir)
+    types = list(module.MEMORY_TYPES)
     skill = (REMEMBER_DIR / "SKILL.md").read_text(encoding="utf-8")
     heading = re.search(r"^# Memory$", skill, re.M)
     assert heading
@@ -206,6 +258,9 @@ def test_memory_type_lists_agree() -> None:
     start = skill.index("**Record — slash command:**")
     triggers = skill[start : skill.index("**Record — natural language", start)]
     assert re.findall(r"`/remember (\w+) <", triggers) == types
+
+
+def test_types_opening_has_no_type_count() -> None:
     opening = TYPES_PATH.read_text("utf-8").split("---", 1)[0]
     # The whole opening is pinned so a type count cannot return in any wording.
     sentence = "Each type below is curated memory in `.remember/MEMORY.md`."
