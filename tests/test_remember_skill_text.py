@@ -106,6 +106,8 @@ def test_evidence_sources_stay_inside_the_repository_trust_boundary() -> None:
     assert "Reject absolute paths" in text
     assert "home-relative paths" in text
     assert "untracked files" in text
+    assert "as one literal argument" in text
+    assert "never concatenate or interpolate an `Evidence` value" in text
 
 
 def test_typed_recording_captures_and_rechecks_optional_evidence() -> None:
