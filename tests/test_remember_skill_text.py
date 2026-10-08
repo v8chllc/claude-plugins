@@ -96,6 +96,15 @@ def test_evidence_is_optional_and_limited_to_decision_and_error_templates() -> N
         assert "Evidence:" not in by_type[kind]
 
 
+def test_error_example_cites_failed_and_passing_run_results() -> None:
+    text = TYPES_PATH.read_text(encoding="utf-8")
+    error = text.split("## error\n", 1)[1].split("\n---\n", 1)[0]
+
+    assert "actions/runs/1234 (failed before fix)" in error
+    assert "actions/runs/1235 (passed after fix)" in error
+    assert "real entries cite observed results" in normalized(error)
+
+
 def test_evidence_sources_stay_inside_the_repository_trust_boundary() -> None:
     text = normalized(TYPES_PATH.read_text(encoding="utf-8"))
 
