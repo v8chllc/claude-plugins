@@ -43,7 +43,9 @@ Triggered by `/recommend curated`.
    when an available issue or pull request, commit, file reference, or recorded
    command result supports the proposed claim. Omit it when unavailable; do
    not invent evidence or treat an unrun command as a result. Preserve existing
-   `Evidence` on updates only while it supports the revised claim.
+   `Evidence` on updates only while it supports the revised claim. Apply the
+   Evidence source and untrusted-data contract in
+   `../remember/references/types.md`.
 6. Present recommendations only; do not write automatically.
 7. For each recommendation include: action, type, subject, reason it is durable, proposed entry text using the template from `../remember/references/types.md`.
 8. Ask which to apply.
@@ -73,7 +75,8 @@ Triggered by `/recommend session`.
    For `decision` and `error` curated adds and updates, include optional
    `Evidence` when checkable provenance supports the proposed claim. Omit it
    when unavailable, never invent it, and retain existing `Evidence` only
-   while it supports the revised claim.
+   while it supports the revised claim. Apply the Evidence source and
+   untrusted-data contract in `../remember/references/types.md`.
 7. Present recommendations grouped by target and action: `add`, `update`, `skip`. List unsupported procedural candidates separately with a note.
 8. Before applying approved changes, run
    `python "${CLAUDE_PLUGIN_ROOT}/skills/remember/scripts/validate_memory.py" --root . --toolchain claude`.
