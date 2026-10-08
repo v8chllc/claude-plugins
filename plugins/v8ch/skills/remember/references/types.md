@@ -101,13 +101,14 @@ Symptom: uv run fails with "no project found" in CI
 Root cause: pyproject.toml not in the working directory at job start
 Fix: Add `working-directory: ./backend` to the CI job step
 Status: resolved
-Evidence: .github/workflows/ci.yml (working directory fix)
+Evidence: https://github.com/example/backend/actions/runs/1234 (failed before fix); https://github.com/example/backend/actions/runs/1235 (passed after fix)
 ```
 
 Use `Evidence` when an issue or pull request, commit, repository file admitted
 by the Evidence sources rules, or recorded command result supports the failure
 and fix. Omit it when no checkable source is available; an unrun command or
-inferred source is not evidence.
+inferred source is not evidence. The example run URLs illustrate the format;
+real entries cite observed results.
 
 ---
 
