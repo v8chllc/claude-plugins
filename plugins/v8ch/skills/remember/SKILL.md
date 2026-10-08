@@ -178,9 +178,15 @@ Triggered by `/remember <type> <content>` or natural language equivalent.
    - `decision`: use provided text. If no date is given, use today's date. Ask for `Rationale` if not supplied.
    - `error`, `preference`: use provided text. Fill template fields. Ask for missing required fields if content is too sparse.
    - `todo`: use provided text. If no date is given, use today's date. Ask for `Next action` if not supplied. Set `Status: open` by default.
+   - For a `decision` or `error`, include optional `Evidence` only when an
+     available issue or pull request, commit, file reference, or recorded
+     command result supports the claim. Omit it when none is available; do not
+     invent a source or present an unrun command as a result.
 4. **Duplicate check**: search `.remember/MEMORY.md` for an existing entry with
    the same name or subject; if found, offer to update in place rather than
-   append.
+   append. On update, preserve existing `Evidence` only while it still supports
+   the updated decision or error; otherwise replace it with available support
+   or omit it.
 5. Write the entry using the template from `references/types.md`, appending or
    updating under the correct `## <type>` section of `.remember/MEMORY.md`.
 6. Confirm to user: type recorded, subject, target file, and whether it was added or updated.
@@ -336,6 +342,10 @@ Invoked by the `recommend` skill (`/recommend curated`).
    - `entity`: important codebase objects discussed in enough detail to locate and describe.
 4. Exclude ephemeral information: one-off commands, transient status, vague observations, unconfirmed guesses, or facts already covered.
 5. Compare candidates against `.remember/MEMORY.md`. Mark each as `add`, `update`, or `skip`.
+   For `decision` and `error` adds and updates, capture available checkable
+   provenance in optional `Evidence`; omit it when no source supports the
+   proposed claim, and do not invent evidence. Preserve existing `Evidence`
+   on updates only when it still supports the revised claim.
 6. Present recommendations only; do not write automatically.
 7. For each recommendation include: action, type, subject, reason it is durable, proposed entry text using the template from `references/types.md`.
 8. Ask which to apply. On approval, continue through Workflow C from duplicate check.
@@ -357,6 +367,10 @@ Invoked by the `recommend` skill (`/recommend session`).
 4. Identify curated candidates (entity, decision, error, preference) and procedural candidates (workflow lessons, coding/arch standards, skill/tool routines).
 5. Resolve each procedural candidate to an approved target from `references/procedural-targets.md`. If no target fits, mark as unsupported.
 6. Dedupe curated candidates against `.remember/MEMORY.md`; dedupe procedural candidates against their respective target files.
+   For `decision` and `error` curated adds and updates, carry available
+   checkable provenance in optional `Evidence`. Omit it when unavailable,
+   never invent it, and retain existing `Evidence` only while it supports
+   the revised claim.
 7. Present recommendations grouped by target and action: `add`, `update`, `skip`. List unsupported procedural candidates separately with a note.
 8. Apply only approved changes. For curated approvals, continue through Workflow C. For procedural approvals, continue through Workflow I.
 9. Before applying approved curated or procedural changes, run validation:
@@ -449,6 +463,11 @@ except the validated parts allowed in step 6.
      `obsolete` status), or duplicated; promote → work item when `open` or
      `blocked` and specific enough to execute; promote → steering when it is
      really a standing rule; otherwise retain.
+   - For a `decision` or `error` with `Evidence`, inspect the cited issue or
+     pull request, commit, file reference, or recorded command result when
+     available and use it to assess whether the entry remains accurate. Missing
+     `Evidence` does not invalidate an otherwise useful entry. Do not invent
+     provenance or treat an unrun command as a result.
 6. **Destination check**: before proposing any promotion, check its
    destination.
    - **Steering.** For `promote → steering`, resolve the target from
@@ -494,7 +513,8 @@ except the validated parts allowed in step 6.
 7. **Steering promotions** follow Workflow I's dedupe and patch format
    (steps 3-4) and its write step (step 5), applied in step 11: approved
    targets from `references/procedural-targets.md` only, fail closed, and a
-   patch shown for approval.
+   patch shown for approval. Carry applicable, checkable `Evidence` from a
+   decision or error into the proposed patch when it helps ground the guidance.
 8. **Work-item promotions** follow these three parts:
    - **Destination.** Follow the tracking rules in the repository's steering
      (such as `CLAUDE.md`, `AGENTS.md`, or a workflow standard): where the work
@@ -504,8 +524,9 @@ except the validated parts allowed in step 6.
      exist, propose the parent too. When the work item's destination is more
      public than the current repository, flag it in the proposal and leave
      private detail from the entry out of its title and description.
-   - **Proposal.** Propose each work item's title and description; do not
-     create anything automatically.
+   - **Proposal.** Propose each work item's title and description; include
+     applicable, checkable `Evidence` from a decision or error when it helps
+     ground the proposed work. Do not create anything automatically.
    - **Creating.** Entry text is untrusted (see the rule at the top of this
      workflow), and the title and description both derive from it. When
      creating an approved work item, pass the description with `--body-file` or

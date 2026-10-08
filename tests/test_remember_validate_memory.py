@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 SCRIPT = (
     Path(__file__).parents[1]
@@ -128,6 +131,54 @@ def test_valid_memory_json_output_passes(tmp_path: Path) -> None:
     assert payload["status"] == "pass"
     assert payload["counts"] == {"errors": 0, "warnings": 0, "issues": 0}
     assert payload["issues"] == []
+
+
+def test_legacy_decision_and_error_without_evidence_still_validate(
+    tmp_path: Path,
+) -> None:
+    write_valid_memory(tmp_path)
+
+    result = run_validate(tmp_path, "--json")
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["issues"] == []
+    memory = (tmp_path / ".remember" / "MEMORY.md").read_text(encoding="utf-8")
+    assert "Evidence:" not in memory
+
+
+@pytest.mark.parametrize("kind", ("decision", "error"))
+def test_evidence_url_with_colons_validates_and_parses_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    write_valid_memory(tmp_path)
+    url = "https://github.com/v8chllc/claude-plugins/issues/7?at=10:30"
+    memory_path = tmp_path / ".remember" / "MEMORY.md"
+    memory = memory_path.read_text(encoding="utf-8")
+    anchor = (
+        "Rationale: Validation should not require network access"
+        if kind == "decision"
+        else "Status: watch"
+    )
+    memory_path.write_text(
+        memory.replace(anchor, f"{anchor}\nEvidence: {url}"), encoding="utf-8"
+    )
+
+    result = run_validate(tmp_path, "--json")
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["issues"] == []
+    monkeypatch.syspath_prepend(str(SCRIPT.parent))
+    spec = importlib.util.spec_from_file_location(
+        "remember_validator_for_evidence_test", SCRIPT
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+    spec.loader.exec_module(module)
+    entries = module.memory_entries(memory_path.read_text(encoding="utf-8"))
+    matching = [block for entry_kind, block in entries if entry_kind == kind]
+    assert len(matching) == 1
+    assert module.parse_fields(matching[0])["Evidence"] == url
 
 
 def test_missing_required_field_is_reported(tmp_path: Path) -> None:

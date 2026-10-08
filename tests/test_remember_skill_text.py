@@ -78,6 +78,74 @@ def test_todo_status_is_open_or_blocked_only() -> None:
     assert "a completed or obsolete todo is removed" in normalized(text)
 
 
+def test_evidence_is_optional_and_limited_to_decision_and_error_templates() -> None:
+    sections = re.split(
+        r"(?m)^## (entity|decision|error|preference|todo)$",
+        TYPES_PATH.read_text(encoding="utf-8"),
+    )
+    by_type = dict(zip(sections[1::2], sections[2::2], strict=True))
+
+    for kind in ("decision", "error"):
+        section = by_type[kind]
+        assert section.count("Evidence:") == 2  # template and example
+        assert "optional checkable source" in section
+        assert "Omit it when no checkable source is available" in normalized(section)
+        assert "recorded command result" in section
+        assert "unrun command or inferred source is not evidence" in section
+    for kind in ("entity", "preference", "todo"):
+        assert "Evidence:" not in by_type[kind]
+
+
+def test_typed_recording_captures_and_rechecks_optional_evidence() -> None:
+    section = normalized(workflow_block("## Workflow C: Record (typed)"))
+
+    assert (
+        "For a `decision` or `error`, include optional `Evidence` only when" in section
+    )
+    assert "Omit it when none is available" in section
+    assert "do not invent a source" in section
+    assert "preserve existing `Evidence` only while it still supports" in section
+
+
+@pytest.mark.parametrize(
+    "heading",
+    ("## Workflow F: Recommend Curated", "## Workflow G: Recommend Session"),
+)
+def test_remember_recommendations_carry_supported_evidence(heading: str) -> None:
+    section = normalized(workflow_block(heading))
+
+    assert "For `decision` and `error`" in section
+    assert "optional `Evidence`" in section
+    assert "omit it when" in section.lower()
+    assert "invent" in section
+    assert "existing `Evidence`" in section
+
+
+@pytest.mark.parametrize(
+    "heading",
+    ("## Workflow E: Recommend Curated", "## Workflow F: Recommend Session"),
+)
+def test_recommend_skill_carries_supported_evidence(heading: str) -> None:
+    text = (SKILLS_DIR / "recommend/SKILL.md").read_text(encoding="utf-8")
+    start = text.index(heading)
+    section = normalized(text[start : text.index("\n---\n", start)])
+
+    assert "For `decision` and `error`" in section
+    assert "optional `Evidence`" in section
+    assert "Omit it when" in section
+    assert "invent" in section
+    assert "existing `Evidence`" in section
+
+
+def test_review_uses_evidence_for_retention_and_promotions() -> None:
+    section = review_section()
+
+    assert "with `Evidence`, inspect the cited issue or pull request" in section
+    assert "Missing `Evidence` does not invalidate an otherwise useful entry" in section
+    assert "Carry applicable, checkable `Evidence`" in section
+    assert "include applicable, checkable `Evidence`" in section
+
+
 def test_legacy_directive_is_still_shipped() -> None:
     assert LEGACY_DIRECTIVE.is_file()
 

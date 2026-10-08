@@ -45,6 +45,7 @@ Decision: <what was decided>
 Date: <YYYY-MM-DD>
 Rationale: <why>
 Do not reverse: <consequence of reverting — omit if not significant>
+Evidence: <optional checkable source supporting this decision>
 ```
 
 Example:
@@ -54,7 +55,12 @@ Decision: Use SQLite for local dev, PostgreSQL in production
 Date: 2025-05-20
 Rationale: Dev/prod parity not needed for this service; keeps onboarding simple
 Do not reverse: Saves ~15 min of setup per new dev machine
+Evidence: docs/architecture.md (database choice and local setup)
 ```
+
+Use `Evidence` when an issue or pull request, commit, file reference, or
+recorded command result supports the decision. Omit it when no checkable source
+is available; an unrun command or inferred source is not evidence.
 
 ---
 
@@ -69,6 +75,7 @@ Symptom: <what goes wrong>
 Root cause: <why it happens>
 Fix: <how to resolve>
 Status: <resolved | watch>
+Evidence: <optional checkable source supporting this error and fix>
 ```
 
 Example:
@@ -78,7 +85,12 @@ Symptom: uv run fails with "no project found" in CI
 Root cause: pyproject.toml not in the working directory at job start
 Fix: Add `working-directory: ./backend` to the CI job step
 Status: resolved
+Evidence: .github/workflows/ci.yml (working directory fix)
 ```
+
+Use `Evidence` when an issue or pull request, commit, file reference, or
+recorded command result supports the failure and fix. Omit it when no checkable
+source is available; an unrun command or inferred source is not evidence.
 
 ---
 
