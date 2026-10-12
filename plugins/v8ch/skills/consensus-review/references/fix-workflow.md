@@ -22,7 +22,7 @@ Invoke `v8ch:consensus-review-fixer` with:
 
 The fixer gives every current finding exactly one disposition — `fixed`,
 `declined`, `partial`, or `work-item-required` — applies the in-scope changes,
-runs the repository's documented quality commands plus a mutation check per fix,
+runs the repository's documented quality commands plus repair-appropriate proof,
 and writes one fix log holding everything the commit body needs.
 
 The raw score is the only threshold input. There are no fix modes, no target
@@ -38,14 +38,15 @@ this workflow returns an outcome, and the orchestrator emits the run's single
 terminal signal.
 
 - **`COMPLETE`** — every current finding carries a disposition, every applied
-  repair carries a confirmed mutation check, and the quality commands passed.
-  Continue to Step 3.
-- **`MUTATION_UNPROVEN`** — an applied repair (`fixed`, or `partial` where code
-  changed) has a mutation check the fixer could not confirm. Commit nothing and
-  return `BLOCKERS_REMAIN` naming those findings. The commit body's purpose is
-  fix evidence; committing a repair whose check never failed without it records
-  a claim nothing tested. A `declined` or `work-item-required` finding applies no
-  repair and needs no mutation check.
+  text-only repair has author verification, every applied code or configuration
+  repair has a confirmed mutation check, and the quality commands passed.
+  Continue to Step 3, including when the only applied repairs are
+  author-verified text-only repairs.
+- **`MUTATION_UNPROVEN`** — an applied code or configuration repair (`fixed`, or
+  `partial` where that content changed) has a mutation check the fixer could not
+  confirm. Commit nothing and return `BLOCKERS_REMAIN` naming those findings.
+  A text-only repair never causes this outcome. A `declined` or
+  `work-item-required` finding applies no repair and needs no proof.
 - **`QUALITY_FAILURES`** — the repository's quality commands still fail and the
   fixer could not resolve them. Commit nothing and return `QUALITY_FAILURES` with
   the failing commands.
@@ -72,7 +73,9 @@ The commit body records:
 - the raw score and the cycle number;
 - every finding's disposition;
 - the quality commands and their results;
-- one mutation check per fix;
+- one mutation check per code or configuration repair;
+- the separate author-verification section for every text-only repair, with
+  finding IDs and inspected corrections;
 - the work-item records the fixer wrote under `## Work Items Required`.
 
 ## Step 4 — Push
@@ -109,11 +112,15 @@ identical runs cannot end on different signals:
    returned `MUTATION_UNPROVEN` — `BLOCKERS_REMAIN`, naming those findings,
    whatever the budget allows.
 2. Outcome `QUALITY_FAILURES` — `QUALITY_FAILURES` with the failing commands.
-3. Budget remaining — start the next review cycle rather than ending the run.
-4. Budget exhausted, findings remain `partial` or `work-item-required` —
+3. Caller-declared single-cycle cap on a PR/MR — emit
+   `CAPPED_REVIEW_COMPLETE` with this review's URL, score, status, any pushed
+   fix commit SHAs, and work items. Do not start another review. This signal
+   does not claim that a fix commit has been reviewed or that findings closed.
+4. Budget remaining — start the next review cycle rather than ending the run.
+5. Budget exhausted, findings remain `partial` or `work-item-required` —
    `BLOCKERS_REMAIN`.
-5. Budget exhausted, commits were pushed, no `clean` review — `PUSH_COMPLETE`.
-6. Budget exhausted, nothing was committed (outcome `NO_CHANGE`) —
+6. Budget exhausted, commits were pushed, no `clean` review — `PUSH_COMPLETE`.
+7. Budget exhausted, nothing was committed (outcome `NO_CHANGE`) —
    `MAX_REVIEWS_REACHED`. `PUSH_COMPLETE` reports pushed commits and never
    applies here.
 
