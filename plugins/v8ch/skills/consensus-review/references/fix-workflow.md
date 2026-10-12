@@ -48,8 +48,8 @@ terminal signal.
   committing. A text-only repair never causes this outcome. A `declined` or
   `work-item-required` finding applies no repair and needs no proof.
 - **`QUALITY_FAILURES`** — the repository's quality commands still fail and the
-  fixer could not resolve them. Commit nothing and return `QUALITY_FAILURES` with
-  the failing commands.
+  fixer could not resolve them. Preserve the failed commands and continue to
+  Step 5 without committing.
 
   Leave the fixer's edits in the working tree. They are most of a repair, and
   discarding them loses work with no record. State in the final report that the
