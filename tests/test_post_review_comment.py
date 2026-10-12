@@ -44,8 +44,6 @@ REQUIRED_ARGS = [
     "parallel-subagents",
     "--plan-source",
     "none",
-    "--reviewed-sha",
-    "1a2b3c4",
     "--scope-basis",
     "full-diff",
     "--files-touched",
@@ -69,15 +67,46 @@ def load_post_review_comment() -> ModuleType:
     return module
 
 
-def write_inputs(tmp_path: Path, *, report: str = REPORT, summary: str = SUMMARY):
+def write_inputs(
+    tmp_path: Path,
+    *,
+    report: str = REPORT,
+    summary: str = SUMMARY,
+    outcome_report: str = REPORT,
+):
     review_file = tmp_path / "review-02.md"
     review_file.write_text(report, encoding="utf-8")
     summary_file = tmp_path / "summary-02.md"
     summary_file.write_text(summary, encoding="utf-8")
-    return review_file, summary_file
+    outcome_file = tmp_path / "outcome-02.json"
+    contract = sys.modules["review_contract"]
+    outcome = contract.resolve_review_outcome(
+        outcome_report,
+        score=module_score(outcome_report),
+        status=module_status(outcome_report),
+        reviewed_sha="1a2b3c4",
+    )
+    outcome_file.write_text(
+        json.dumps(contract.serialize_outcome(outcome)), encoding="utf-8"
+    )
+    return review_file, summary_file, outcome_file
 
 
-def base_args(review_file: Path, summary_file: Path, **overrides: str) -> list[str]:
+def module_score(report: str) -> int:
+    match = sys.modules["review_contract"].extract_quality_score(report)
+    assert match is not None
+    return int(match)
+
+
+def module_status(report: str) -> str:
+    heading = report.split("### Quality Score: ", 1)[1].splitlines()[0]
+    label = heading.split(" — ", 1)[1]
+    return {"Fully Clean": "clean", "Passing": "passing", "Failing": "failing"}[label]
+
+
+def base_args(
+    review_file: Path, summary_file: Path, outcome_file: Path, **overrides: str
+) -> list[str]:
     args = [
         "--pr-number",
         "7",
@@ -87,8 +116,8 @@ def base_args(review_file: Path, summary_file: Path, **overrides: str) -> list[s
         str(summary_file),
         "--cycle",
         "2",
-        "--status",
-        "passing",
+        "--outcome-file",
+        str(outcome_file),
         *REQUIRED_ARGS,
     ]
     for flag, value in overrides.items():
@@ -196,30 +225,33 @@ def test_score_comes_only_from_the_report_heading() -> None:
     assert module.resolve_score(REPORT) == 91
     with pytest.raises(module.ContractError):
         module.resolve_score("### Evidence\n")
-    assert "--score" not in module.build_parser().format_help()
+    help_text = module.build_parser().format_help()
+    assert "--score" not in help_text
+    assert "--status" not in help_text
+    assert "--reviewed-sha" not in help_text
+    assert "--outcome-file" in help_text
 
 
 @pytest.mark.parametrize(
-    ("report", "score"),
+    "report",
     [
-        (REPORT, 95),
-        (REPORT.replace("— Passing", "— Fully Clean"), 91),
+        REPORT.replace("91/100", "95/100"),
+        REPORT.replace("— Passing", "— Fully Clean"),
     ],
 )
-def test_post_refuses_a_score_or_status_that_contradicts_the_report(
-    report: str, score: int
-) -> None:
+def test_post_refuses_an_outcome_that_contradicts_the_report(report: str) -> None:
     module = load_post_review_comment()
+    outcome = module.resolve_review_outcome(
+        REPORT, score=91, status="passing", reviewed_sha="1a2b3c4"
+    )
     with pytest.raises(module.ContractError):
         module.build_comment_body(
             report_text=report,
             summary_text=SUMMARY,
             cycle=2,
-            status="passing",
-            score=score,
+            outcome=outcome,
             delegation_mode="parallel-subagents",
             plan_source="none",
-            reviewed_sha="1a2b3c4",
             scope_basis="full-diff",
             files_touched=3,
             findings_opened=2,
@@ -244,16 +276,16 @@ None.
 
 #### [F-1] [MEDIUM] Preserve the payload
 """
-    outcome = module.resolve_review_outcome(report, score=95, status="passing")
+    outcome = module.resolve_review_outcome(
+        report, score=95, status="passing", reviewed_sha="abc1234"
+    )
     body = module.build_comment_body(
         report_text=report,
         summary_text=outcome.summary,
         cycle=6,
-        status="passing",
-        score=95,
+        outcome=outcome,
         delegation_mode="parallel-subagents",
         plan_source="none",
-        reviewed_sha="abc1234",
         scope_basis="full-diff",
         files_touched=1,
         findings_opened=1,
@@ -262,7 +294,6 @@ None.
     signal = sys.modules["review_contract"].completion_signal(
         outcome,
         cycle=6,
-        reviewed_sha="abc1234",
         review_url="https://example.test/review/6",
         post_succeeded=True,
     )
@@ -270,19 +301,22 @@ None.
     assert "#### [F-1] [MEDIUM] Preserve the payload" in body
     assert signal is not None
     assert signal["details"]["open_findings"] == list(outcome.findings)
+    comment_metadata = json.loads(body.split("\n", 2)[1])
+    assert signal["details"]["reviewed_sha"] == comment_metadata["reviewed_sha"]
 
 
 def test_comment_body_opens_with_exact_v2_metadata(tmp_path: Path) -> None:
     module = load_post_review_comment()
+    outcome = module.resolve_review_outcome(
+        REPORT, score=91, status="passing", reviewed_sha="1a2b3c4"
+    )
     body = module.build_comment_body(
         report_text=REPORT,
         summary_text=SUMMARY,
         cycle=2,
-        status="passing",
-        score=91,
+        outcome=outcome,
         delegation_mode="parallel-subagents",
         plan_source="none",
-        reviewed_sha="1a2b3c4",
         scope_basis="full-diff",
         files_touched=3,
         findings_opened=2,
@@ -310,15 +344,16 @@ def test_comment_body_opens_with_exact_v2_metadata(tmp_path: Path) -> None:
 
 def test_comment_body_renders_the_template_without_placeholders() -> None:
     module = load_post_review_comment()
+    outcome = module.resolve_review_outcome(
+        REPORT, score=91, status="passing", reviewed_sha="1a2b3c4"
+    )
     body = module.build_comment_body(
         report_text=REPORT,
         summary_text=SUMMARY,
         cycle=2,
-        status="passing",
-        score=91,
+        outcome=outcome,
         delegation_mode="parallel-subagents",
         plan_source="supplied: .plan/feature.md",
-        reviewed_sha="1a2b3c4",
         scope_basis="delta-since:9f3a25e",
         files_touched=3,
         findings_opened=2,
@@ -351,16 +386,16 @@ def test_status_icons(status: str, icon: str, score: int) -> None:
             "#### [F-1] [HIGH] Empty row list renders a header with no body",
             "None.",
         )
-    outcome = module.resolve_review_outcome(report, score=score, status=status)
+    outcome = module.resolve_review_outcome(
+        report, score=score, status=status, reviewed_sha="1a2b3c4"
+    )
     body = module.build_comment_body(
         report_text=report,
         summary_text=outcome.summary,
         cycle=1,
-        status=status,
-        score=score,
+        outcome=outcome,
         delegation_mode="parallel-subagents",
         plan_source="none",
-        reviewed_sha="1a2b3c4",
         scope_basis="full-diff",
         files_touched=1,
         findings_opened=0,
@@ -373,11 +408,12 @@ def test_main_posts_to_github_by_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     module = load_post_review_comment()
-    review_file, summary_file = write_inputs(tmp_path)
+    review_file, summary_file, outcome_file = write_inputs(tmp_path)
     posted = capture_posts(module, monkeypatch)
 
     exit_code = module.main(
-        base_args(review_file, summary_file) + ["--repo-dir", str(tmp_path)]
+        base_args(review_file, summary_file, outcome_file)
+        + ["--repo-dir", str(tmp_path)]
     )
 
     assert exit_code == 0
@@ -391,12 +427,13 @@ def test_main_posts_to_gitlab_when_the_env_file_selects_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     module = load_post_review_comment()
-    review_file, summary_file = write_inputs(tmp_path)
+    review_file, summary_file, outcome_file = write_inputs(tmp_path)
     (tmp_path / ".env").write_text("DEV_SEC_OPS_PLATFORM=gitlab\n", encoding="utf-8")
     posted = capture_posts(module, monkeypatch)
 
     exit_code = module.main(
-        base_args(review_file, summary_file) + ["--repo-dir", str(tmp_path)]
+        base_args(review_file, summary_file, outcome_file)
+        + ["--repo-dir", str(tmp_path)]
     )
 
     assert exit_code == 0
@@ -407,12 +444,12 @@ def test_main_platform_flag_beats_the_env_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     module = load_post_review_comment()
-    review_file, summary_file = write_inputs(tmp_path)
+    review_file, summary_file, outcome_file = write_inputs(tmp_path)
     (tmp_path / ".env").write_text("DEV_SEC_OPS_PLATFORM=gitlab\n", encoding="utf-8")
     posted = capture_posts(module, monkeypatch)
 
     exit_code = module.main(
-        base_args(review_file, summary_file)
+        base_args(review_file, summary_file, outcome_file)
         + ["--repo-dir", str(tmp_path), "--platform", "github"]
     )
 
@@ -423,15 +460,11 @@ def test_main_platform_flag_beats_the_env_file(
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"reviewed_sha": "ABC1234"},
-        {"reviewed_sha": "abc12"},
         {"scope_basis": "since:abc1234"},
         {"plan_source": ".plan/feature.md"},
         {"files_touched": "-1"},
     ],
     ids=[
-        "uppercase-sha",
-        "short-sha",
         "bad-scope",
         "bad-plan-source",
         "negative-count",
@@ -444,11 +477,11 @@ def test_main_rejects_invalid_metadata_without_posting(
     overrides: dict[str, str],
 ) -> None:
     module = load_post_review_comment()
-    review_file, summary_file = write_inputs(tmp_path)
+    review_file, summary_file, outcome_file = write_inputs(tmp_path)
     posted = capture_posts(module, monkeypatch)
 
     exit_code = module.main(
-        base_args(review_file, summary_file, **overrides)
+        base_args(review_file, summary_file, outcome_file, **overrides)
         + ["--repo-dir", str(tmp_path)]
     )
 
@@ -461,11 +494,12 @@ def test_main_rejects_an_empty_review_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     module = load_post_review_comment()
-    review_file, summary_file = write_inputs(tmp_path, report="   \n")
+    review_file, summary_file, outcome_file = write_inputs(tmp_path, report="   \n")
     posted = capture_posts(module, monkeypatch)
 
     exit_code = module.main(
-        base_args(review_file, summary_file) + ["--repo-dir", str(tmp_path)]
+        base_args(review_file, summary_file, outcome_file)
+        + ["--repo-dir", str(tmp_path)]
     )
 
     assert exit_code == 1
@@ -477,11 +511,12 @@ def test_main_reports_a_missing_platform_client(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     module = load_post_review_comment()
-    review_file, summary_file = write_inputs(tmp_path)
+    review_file, summary_file, outcome_file = write_inputs(tmp_path)
     monkeypatch.setattr(module, "GH", None)
 
     exit_code = module.main(
-        base_args(review_file, summary_file) + ["--repo-dir", str(tmp_path)]
+        base_args(review_file, summary_file, outcome_file)
+        + ["--repo-dir", str(tmp_path)]
     )
 
     assert exit_code == 1
@@ -492,7 +527,7 @@ def test_main_reports_a_failed_post(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     module = load_post_review_comment()
-    review_file, summary_file = write_inputs(tmp_path)
+    review_file, summary_file, outcome_file = write_inputs(tmp_path)
 
     def fail(pr_number: int, body: str, repo_dir: str = ".") -> None:
         raise subprocess.CalledProcessError(1, ["gh"])
@@ -500,7 +535,8 @@ def test_main_reports_a_failed_post(
     monkeypatch.setattr(module, "post_comment_github", fail)
 
     exit_code = module.main(
-        base_args(review_file, summary_file) + ["--repo-dir", str(tmp_path)]
+        base_args(review_file, summary_file, outcome_file)
+        + ["--repo-dir", str(tmp_path)]
     )
 
     assert exit_code == 1
@@ -544,17 +580,17 @@ def test_the_script_still_renders_the_frozen_wire_format() -> None:
     """
     module = load_post_review_comment()
     expected = (FIXTURES_DIR / "review-comment-v2.md").read_text(encoding="utf-8")
+    report = (FIXTURES_DIR / "review-report.md").read_text(encoding="utf-8").strip()
+    outcome = module.resolve_review_outcome(
+        report, score=85, status="passing", reviewed_sha="1a2b3c4"
+    )
     rendered = module.build_comment_body(
-        report_text=(FIXTURES_DIR / "review-report.md")
-        .read_text(encoding="utf-8")
-        .strip(),
+        report_text=report,
         summary_text=(FIXTURES_DIR / "review-summary.md").read_text(encoding="utf-8"),
         cycle=2,
-        status="passing",
-        score=85,
+        outcome=outcome,
         delegation_mode="parallel-subagents",
         plan_source="none",
-        reviewed_sha="1a2b3c4",
         scope_basis="full-diff",
         files_touched=3,
         findings_opened=2,
@@ -578,16 +614,20 @@ def test_a_status_contradicting_the_score_is_refused(status: str, score: int) ->
     """The comment shows one verdict and the metadata another; recovery routes
     on the metadata, so the pair must agree before publication."""
     module = load_post_review_comment()
+    outcome = module.resolve_review_outcome(
+        REPORT, score=91, status="passing", reviewed_sha="1a2b3c4"
+    )
+    report = REPORT.replace(
+        "91/100 — Passing", f"{score}/100 — {module.status_label(status)}"
+    )
     with pytest.raises(module.ContractError):
         module.build_comment_body(
-            report_text=REPORT.replace("91/100", f"{score}/100"),
+            report_text=report,
             summary_text=SUMMARY,
             cycle=1,
-            status=status,
-            score=score,
+            outcome=outcome,
             delegation_mode="parallel-subagents",
             plan_source="none",
-            reviewed_sha="1a2b3c4",
             scope_basis="full-diff",
             files_touched=1,
             findings_opened=0,

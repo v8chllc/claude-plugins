@@ -57,19 +57,20 @@ def github_comment(body: str, *, created_at: str = "2026-09-10T12:00:00Z") -> di
 def rendered_comment(**overrides: Any) -> str:
     """Render a v2 comment with the sibling script, as a real thread would hold."""
     module = load_post_review_comment()
+    reviewed_sha = str(overrides.pop("reviewed_sha", "1a2b3c4"))
+    report = (FIXTURES_DIR / "review-report.md").read_text(encoding="utf-8").strip()
+    outcome = module.resolve_review_outcome(
+        report, score=85, status="passing", reviewed_sha=reviewed_sha
+    )
     kwargs: dict[str, Any] = {
-        "report_text": (FIXTURES_DIR / "review-report.md")
-        .read_text(encoding="utf-8")
-        .strip(),
+        "report_text": report,
         "summary_text": (FIXTURES_DIR / "review-summary.md").read_text(
             encoding="utf-8"
         ),
         "cycle": 1,
-        "status": "passing",
-        "score": 85,
+        "outcome": outcome,
         "delegation_mode": "parallel-subagents",
         "plan_source": "none",
-        "reviewed_sha": "1a2b3c4",
         "scope_basis": "full-diff",
         "files_touched": 3,
         "findings_opened": 2,

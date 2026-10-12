@@ -20,9 +20,9 @@ alter the findings, the score, or the status.
 ## Inputs
 
 - **Report** — the synthesizer's output in full.
-- **Resolved outcome** — the `review_contract.resolve_review_outcome` result
-  produced by the skill from that exact report, score, and status.
-- **PR/MR number**, **cycle**, **status**, **score**.
+- **Resolved outcome artifact** — the JSON file produced by the skill's exact
+  `review_contract.py resolve` command.
+- **PR/MR number**, **cycle**.
 - **Delegation mode** — `parallel-subagents` or `sequential-fallback`.
 - **Plan source** — the literal `none`, or `supplied: <path or short
   description>`, identical to the report's Run Provenance line.
@@ -49,9 +49,9 @@ Cite only repository-relative paths of tracked files, or links. Never an
 absolute path, a home-directory path, or an untracked scratch path — the people
 reading this comment have no checkout of your machine.
 
-Use the resolved outcome's `summary` as the first bullet verbatim. The posting
-script derives the same outcome from the report and rejects a different first
-bullet. Its possible values are:
+Read the outcome artifact and use its `summary` as the first bullet verbatim.
+The posting script derives the same outcome from the report and rejects a
+different first bullet. Its possible values are:
 
 - `clean` — `- Review passed with a score of N/100. No fixes are required.`
 - `passing` at 95 or above, with no open Must Fix and open Should Fix findings —
@@ -72,12 +72,11 @@ uv run <skill-dir>/scripts/post_review_comment.py \
   --pr-number <number> \
   --review-file <scratch-dir>/review-<cycle:02d>.md \
   --summary-file <scratch-dir>/summary-<cycle:02d>.md \
+  --outcome-file <scratch-dir>/outcome-<cycle:02d>.json \
   --repo-dir <repo-dir> \
   --cycle <cycle> \
-  --status <clean|passing|failing> \
   --delegation-mode <parallel-subagents|sequential-fallback> \
   --plan-source '<none | supplied: source>' \
-  --reviewed-sha <sha> \
   --scope-basis '<full-diff | delta-since:sha>' \
   --files-touched <n> \
   --findings-opened <n> \
@@ -85,8 +84,10 @@ uv run <skill-dir>/scripts/post_review_comment.py \
 ```
 
 Substitute the absolute skill directory the orchestrator gave you. The script
-validates every field, embeds the hidden `schema_version: 2` metadata that later
-cycles recover, and posts through `gh` or `glab`.
+validates the report against the resolved artifact and takes the score, status,
+reviewed SHA, summary rule, and findings from that artifact. It embeds the
+hidden `schema_version: 2` metadata that later cycles recover, and posts through
+`gh` or `glab`.
 
 If the script exits non-zero, report its exact error and stop. Do not edit the
 report to satisfy the validator, and do not retry with different values.

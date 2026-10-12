@@ -1,4 +1,5 @@
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -366,11 +367,12 @@ def test_advisory_outcome_builds_exact_later_cycle_terminal_payload(
             "#### [F-9] [LOW] Latent companion",
         ]
     )
-    outcome = contract.resolve_review_outcome(report, score=score, status="passing")
+    outcome = contract.resolve_review_outcome(
+        report, score=score, status="passing", reviewed_sha="abc1234"
+    )
     signal = contract.completion_signal(
         outcome,
         cycle=cycle,
-        reviewed_sha="abc1234",
         review_url="https://example.test/review/1",
         post_succeeded=True,
     )
@@ -410,11 +412,12 @@ def test_failed_post_aborts_before_advisory_completion() -> None:
 
 #### [F-1] [MEDIUM] One finding
 """
-    outcome = contract.resolve_review_outcome(report, score=95, status="passing")
+    outcome = contract.resolve_review_outcome(
+        report, score=95, status="passing", reviewed_sha="abc1234"
+    )
     assert contract.completion_signal(
         outcome,
         cycle=4,
-        reviewed_sha="abc1234",
         review_url=None,
         post_succeeded=False,
     ) == {
@@ -427,6 +430,74 @@ def test_failed_post_aborts_before_advisory_completion() -> None:
             "review_url": None,
         },
     }
+
+
+def test_resolve_and_signal_command_boundaries_preserve_the_reviewed_sha(
+    tmp_path: Path,
+) -> None:
+    report_file = tmp_path / "report.md"
+    outcome_file = tmp_path / "outcome.json"
+    signal_file = tmp_path / "signal.json"
+    report_file.write_text(
+        """### Quality Score: 95/100 — Passing
+
+### Should Fix
+
+#### [F-1] [MEDIUM] One finding
+""",
+        encoding="utf-8",
+    )
+    script = SCRIPTS_DIR / "review_contract.py"
+    subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "resolve",
+            "--report-file",
+            str(report_file),
+            "--score",
+            "95",
+            "--status",
+            "passing",
+            "--reviewed-sha",
+            "abc1234",
+            "--output",
+            str(outcome_file),
+        ],
+        check=True,
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "signal",
+            "--outcome-file",
+            str(outcome_file),
+            "--cycle",
+            "8",
+            "--review-url",
+            "https://example.test/review/8",
+            "--output",
+            str(signal_file),
+        ],
+        check=True,
+    )
+
+    outcome = json.loads(outcome_file.read_text(encoding="utf-8"))
+    signal = json.loads(signal_file.read_text(encoding="utf-8"))
+    assert outcome["reviewed_sha"] == "abc1234"
+    assert signal["details"]["reviewed_sha"] == outcome["reviewed_sha"]
+
+
+def test_signal_command_has_no_independent_reviewed_sha_input() -> None:
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS_DIR / "review_contract.py"), "signal", "--help"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    signal_help = result.stdout
+    assert "--reviewed-sha" not in signal_help
 
 
 @pytest.mark.parametrize(
@@ -467,9 +538,9 @@ def test_posted_advisory_branch_precedes_the_fixer() -> None:
         "`references/fix-workflow.md`"
     )
     assert "Do not invoke the fixer" in branch
-    assert "completion_signal" in branch
+    assert "review_contract.py signal" in branch
     assert "validated findings" in branch
-    assert "reviewed SHA" in branch
+    assert "outcome-file" in branch
     assert "`post_failed`" in skill
     assert "`score`, `status`, `review_url`, `reviewed_sha`, `open_findings`" in skill
 

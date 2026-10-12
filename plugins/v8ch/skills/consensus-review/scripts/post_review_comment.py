@@ -27,8 +27,10 @@ from string import Template
 
 from review_contract import (
     ContractError,
+    ReviewOutcome,
     build_metadata,
     extract_quality_score,
+    read_outcome,
     render_metadata_block,
     resolve_review_outcome,
     status_label,
@@ -164,11 +166,9 @@ def build_comment_body(
     report_text: str,
     summary_text: str,
     cycle: int,
-    status: str,
-    score: int,
+    outcome: ReviewOutcome,
     delegation_mode: str,
     plan_source: str,
-    reviewed_sha: str,
     scope_basis: str,
     files_touched: int,
     findings_opened: int,
@@ -176,14 +176,21 @@ def build_comment_body(
 ) -> str:
     """Build the full review comment, metadata block first."""
     validate_report(report_text)
-    outcome = resolve_review_outcome(report_text, score=score, status=status)
+    resolved = resolve_review_outcome(
+        report_text,
+        score=outcome.score,
+        status=outcome.status,
+        reviewed_sha=outcome.reviewed_sha,
+    )
+    if resolved != outcome:
+        raise ContractError("The resolved outcome artifact contradicts the report.")
     metadata = build_metadata(
         cycle=cycle,
-        status=status,
-        score=score,
+        status=outcome.status,
+        score=outcome.score,
         delegation_mode=delegation_mode,
         plan_source=plan_source,
-        reviewed_sha=reviewed_sha,
+        reviewed_sha=outcome.reviewed_sha,
         scope_basis=scope_basis,
         files_touched=files_touched,
         findings_opened=findings_opened,
@@ -191,18 +198,18 @@ def build_comment_body(
     )
     body = load_template().substitute(
         {
-            "icon": STATUS_EMOJI[status],
+            "icon": STATUS_EMOJI[outcome.status],
             "cycle_suffix": f"{cycle:02d}",
-            "score": str(score),
-            "status_label": status_label(status),
+            "score": str(outcome.score),
+            "status_label": status_label(outcome.status),
             "provenance_line": build_provenance_line(
                 delegation_mode=delegation_mode,
                 plan_source=plan_source,
                 scope_basis=scope_basis,
-                reviewed_sha=reviewed_sha,
+                reviewed_sha=outcome.reviewed_sha,
             ),
             "summary_text": validate_summary(
-                summary_text, expected_first_bullet=outcome.summary
+                summary_text, expected_first_bullet=resolved.summary
             ),
             "details_text": report_text,
         }
@@ -281,10 +288,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--cycle", type=int, required=True, help="Review cycle number (>= 1)"
     )
     parser.add_argument(
-        "--status",
-        choices=["clean", "passing", "failing"],
+        "--outcome-file",
         required=True,
-        help="Review status decided by the synthesizer",
+        help="Resolved outcome JSON written by review_contract.py resolve",
     )
     parser.add_argument(
         "--delegation-mode",
@@ -296,9 +302,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--plan-source",
         required=True,
         help="'none', or 'supplied: <path or short description>'",
-    )
-    parser.add_argument(
-        "--reviewed-sha", required=True, help="Reviewed HEAD SHA (7-40 lowercase hex)"
     )
     parser.add_argument(
         "--scope-basis",
@@ -328,15 +331,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         report_text = read_required_text(args.review_file, label="review")
         summary_text = read_required_text(args.summary_file, label="summary")
+        outcome = read_outcome(args.outcome_file)
         body = build_comment_body(
             report_text=report_text,
             summary_text=summary_text,
             cycle=args.cycle,
-            status=args.status,
-            score=resolve_score(report_text),
+            outcome=outcome,
             delegation_mode=args.delegation_mode,
             plan_source=args.plan_source,
-            reviewed_sha=args.reviewed_sha,
             scope_basis=args.scope_basis,
             files_touched=args.files_touched,
             findings_opened=args.findings_opened,
