@@ -81,6 +81,14 @@ _WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 
 SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 QUALITY_SCORE_RE = re.compile(r"^### Quality Score:\s*(\d+)/100\b", re.MULTILINE)
+FINDING_HEADING_RE = re.compile(
+    r"^#### \[(F-\d+)\] \[(CRITICAL|HIGH|MEDIUM|LOW)\] (.+)$"
+)
+FINDING_SECTIONS = {
+    "### Must Fix": MUST_FIX,
+    "### Should Fix": SHOULD_FIX,
+    "### Latent Findings": LATENT,
+}
 METADATA_BLOCK_RE = re.compile(
     rf"<!--\s*{COMMENT_MARKER}\s*(.*?)\s*-->",
     re.DOTALL,
@@ -168,6 +176,40 @@ def extract_quality_score(report_text: str) -> int | None:
     """Return the raw score from a synthesized report heading, if present."""
     match = QUALITY_SCORE_RE.search(report_text)
     return int(match.group(1)) if match else None
+
+
+def open_findings(report_text: str) -> list[dict[str, str]]:
+    """Read the open findings from a synthesized report in report order."""
+    section: str | None = None
+    findings: list[dict[str, str]] = []
+    for line in report_text.splitlines():
+        if line.startswith("### "):
+            section = FINDING_SECTIONS.get(line.strip())
+            continue
+        if section is None:
+            continue
+        match = FINDING_HEADING_RE.match(line)
+        if match:
+            identifier, severity, title = match.groups()
+            findings.append(
+                {
+                    "id": identifier,
+                    "severity": severity,
+                    "section": section,
+                    "title": title,
+                }
+            )
+    return findings
+
+
+def advisory_completion(
+    score: int, status: str, findings: Iterable[dict[str, str]]
+) -> bool:
+    """Return whether a posted review can hand open findings to its caller."""
+    if score < CLEAN_MIN_SCORE or status != STATUS_PASSING:
+        return False
+    sections = [finding["section"] for finding in findings]
+    return MUST_FIX not in sections and SHOULD_FIX in sections
 
 
 def _require_int(value: object, *, key: str, minimum: int, maximum: int | None) -> int:

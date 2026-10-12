@@ -111,6 +111,9 @@ Then set the status — the three are mutually exclusive:
 - `failing` — score below 85.
 
 Label the score heading `Fully Clean`, `Passing`, or `Failing` to match.
+At 95 or above, an open Should Fix finding still makes the status `passing`;
+do not call that report `clean`. Keep all open findings, including Latent
+Findings, in their numbered report sections so the caller can disposition them.
 
 ## Citations
 

@@ -66,7 +66,7 @@ def rendered_comment(**overrides: Any) -> str:
         ),
         "cycle": 1,
         "status": "passing",
-        "score": 91,
+        "score": 85,
         "delegation_mode": "parallel-subagents",
         "plan_source": "none",
         "reviewed_sha": "1a2b3c4",
@@ -136,7 +136,7 @@ def test_a_v2_comment_rendered_by_the_poster_is_recovered_intact() -> None:
     review = reviews[0]
     assert review.legacy is False
     assert review.cycle == 1
-    assert review.score == "91/100"
+    assert review.score == "85/100"
     assert review.status == "passing"
     assert review.metadata["reviewed_sha"] == "1a2b3c4"
     recovered = module.extract_surviving_body(review.body)

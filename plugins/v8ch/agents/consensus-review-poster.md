@@ -50,8 +50,14 @@ reading this comment have no checkout of your machine.
 Match the first bullet to the status:
 
 - `clean` — `- Review passed with a score of N/100. No fixes are required.`
-- `passing` — `- Review passed with a score of N/100. A fix cycle will address the open findings.`
+- `passing` at 95 or above, with no open Must Fix and open Should Fix findings —
+  `- Review passed with a score of N/100. The caller will disposition the open findings.`
+- other `passing` — `- Review passed with a score of N/100. A fix cycle will address the open findings.`
 - `failing` — `- Review failed with a score of N/100. Fixes are required before merge.`
+
+For the 95+ advisory result, keep metadata status `passing`. The summary must
+not promise an automatic fix cycle or say that no fixes are required. Report
+the posted comment URL so the skill can return the exact review record.
 
 ## Step 3 — Write the report file and post
 

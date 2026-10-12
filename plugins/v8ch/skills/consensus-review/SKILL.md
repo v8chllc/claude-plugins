@@ -79,9 +79,10 @@ project-level agent sharing a bare name is never selected:
 | Posting | `v8ch:consensus-review-poster` |
 | Fixing | `v8ch:consensus-review-fixer` |
 
-Only the three reviewers are delegated, and they run as one parallel batch:
-their work is genuinely independent, and none of them reads another's output.
-Everything else in the run is yours. Record the delegation mode as
+Delegate all six roles. Only the three reviewers run as one parallel batch:
+their work is independent, and none of them reads another's output. Invoke the
+synthesizer, poster, and fixer sequentially at their workflow steps. Record the
+reviewer delegation mode as
 `parallel-subagents`, or `sequential-fallback` if the batch could not run in
 parallel and you ran the reviewers one at a time instead.
 
@@ -163,14 +164,21 @@ prompt. Agents do not receive skill variables.
      mode, the plan source, the reviewed SHA, the scope basis, the blast-radius
      counts, the repository directory, `${CLAUDE_SKILL_DIR}`, and a scratch
      directory. Capture the comment URL. If posting fails, emit `ABORT` with
-     `reason` `post_failed`.
+     `reason` `post_failed` and stop. A failed post never completes a review.
 
 9. **Branch on the status.**
    - `clean` — emit `REVIEW_COMPLETE` and stop.
-   - `passing` or `failing` — run `references/fix-workflow.md`, then review
-     again if the budget allows. That workflow returns an outcome; this skill
-     emits the signal, following the precedence list in its Step 5 so two
-     identical runs cannot end on different signals.
+   - `passing` with a score of at least 95, no open Must Fix, and one or more
+     open Should Fix findings — emit `REVIEW_COMPLETE_WITH_FINDINGS` and stop.
+     Use `review_contract.open_findings` on the posted report to populate
+     `open_findings` in report order, including accompanying Latent findings.
+     Carry the exact reviewed SHA from step 3, the posted comment URL, and the
+     synthesizer's score and `passing` status. Do not invoke the fixer. The
+     caller dispositions every open finding after this invocation.
+   - Other `passing` or `failing` results — run `references/fix-workflow.md`,
+     then review again if the budget allows. That workflow returns an outcome;
+     this skill emits the signal, following the precedence list in its Step 5
+     so two identical runs cannot end on different signals.
 
 ## Budget
 
@@ -178,7 +186,8 @@ At most three reviews per invocation. Every invocation gets a fresh budget,
 whatever the PR/MR's cycle count and whichever toolchain wrote the earlier
 cycles. Cycle numbers themselves accumulate with no cap.
 
-When the third review is still not `clean`, the run ends on the first matching
+When the third review is neither `clean` nor eligible for
+`REVIEW_COMPLETE_WITH_FINDINGS`, the run ends on the first matching
 signal in the fix workflow's Step 5 precedence list. In short: unresolved
 findings give `BLOCKERS_REMAIN`, a pushed third-cycle fix gives `PUSH_COMPLETE`,
 and a third review that produced no commit gives `MAX_REVIEWS_REACHED`. Without
@@ -223,6 +232,7 @@ at that point is `null`; a list with no entries is `[]`.
 | Signal | When | `details` keys |
 | --- | --- | --- |
 | `REVIEW_COMPLETE` | A local review returned its report, or a PR/MR review reached `clean` | `score`, `status`, `review_url` |
+| `REVIEW_COMPLETE_WITH_FINDINGS` | A posted PR/MR review scored at least 95, has `passing` status, no Must Fix, and open Should Fix findings | `score`, `status`, `review_url`, `reviewed_sha`, `open_findings` |
 | `NO_DIFF` | Nothing to review | `scope` |
 | `EVIDENCE_FAILED` | A reviewer failed the evidence gate twice | `failed_passes` |
 | `QUALITY_FAILURES` | Quality commands still fail after the fix pass; nothing is committed and the fixer's edits stay in the working tree | `score`, `review_url`, `failed_commands` |
@@ -233,7 +243,10 @@ at that point is `null`; a list with no entries is `[]`.
 
 `ABORT` `reason` is one of `command_failed`, `head_mismatch`, `branch_mismatch`, `platform_auth`,
 `post_failed`, `read_only_role_mutated`. `work_items` entries are the records
-the fixer wrote under `## Work Items Required`.
+the fixer wrote under `## Work Items Required`. Each `open_findings` entry is
+`{"id": "F-N", "severity": "LOW|MEDIUM|HIGH|CRITICAL", "section":
+"must-fix|should-fix|latent", "title": "<finding heading>"}`. Preserve report
+order and never include Plan Notes.
 
 ## Stop rules
 

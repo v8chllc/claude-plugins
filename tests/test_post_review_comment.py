@@ -187,6 +187,34 @@ def test_score_comes_only_from_the_report_heading() -> None:
     assert "--score" not in module.build_parser().format_help()
 
 
+@pytest.mark.parametrize(
+    ("report", "score"),
+    [
+        (REPORT, 95),
+        (REPORT.replace("— Passing", "— Fully Clean"), 91),
+    ],
+)
+def test_post_refuses_a_score_or_status_that_contradicts_the_report(
+    report: str, score: int
+) -> None:
+    module = load_post_review_comment()
+    with pytest.raises(module.ContractError):
+        module.build_comment_body(
+            report_text=report,
+            summary_text=SUMMARY,
+            cycle=2,
+            status="passing",
+            score=score,
+            delegation_mode="parallel-subagents",
+            plan_source="none",
+            reviewed_sha="1a2b3c4",
+            scope_basis="full-diff",
+            files_touched=3,
+            findings_opened=2,
+            findings_closed=1,
+        )
+
+
 def test_comment_body_opens_with_exact_v2_metadata(tmp_path: Path) -> None:
     module = load_post_review_comment()
     body = module.build_comment_body(
@@ -259,7 +287,9 @@ def test_status_icons(status: str, icon: str, score: int) -> None:
     """Each status renders its icon; the score must sit in that status's band."""
     module = load_post_review_comment()
     body = module.build_comment_body(
-        report_text=REPORT.replace("91/100", f"{score}/100"),
+        report_text=REPORT.replace(
+            "91/100 — Passing", f"{score}/100 — {module.status_label(status)}"
+        ),
         summary_text=SUMMARY,
         cycle=1,
         status=status,

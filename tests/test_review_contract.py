@@ -8,6 +8,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = REPO_ROOT / "plugins/v8ch/skills/consensus-review/scripts"
 FIXTURES_DIR = REPO_ROOT / "tests/fixtures/consensus-review"
+SKILL_FILE = REPO_ROOT / "plugins/v8ch/skills/consensus-review/SKILL.md"
+POSTER_AGENT = REPO_ROOT / "plugins/v8ch/agents/consensus-review-poster.md"
 
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
@@ -249,6 +251,108 @@ def test_an_absolute_or_home_plan_path_is_refused(value: str) -> None:
     """plan_source is published twice and read without this checkout."""
     with pytest.raises(contract.ContractError, match="absolute or"):
         contract.validate_plan_source(value)
+
+
+@pytest.mark.parametrize(
+    ("severities", "expected_score", "expected_advisory"),
+    [
+        (["LOW", "LOW"], 96, True),
+        (["MEDIUM"], 95, True),
+        (["LOW", "LOW", "LOW"], 94, False),
+        ([], 100, False),
+    ],
+)
+def test_advisory_boundary_and_clean_review(
+    severities: list[str], expected_score: int, expected_advisory: bool
+) -> None:
+    findings = [
+        contract.Finding(f"F-{index}", contract.SHOULD_FIX, severity)
+        for index, severity in enumerate(severities, start=1)
+    ]
+    score = contract.score_findings(findings)
+    status = contract.review_status(score, findings)
+    report = "\n".join(
+        ["### Should Fix"]
+        + [
+            f"#### [F-{index}] [{severity}] Finding {index}"
+            for index, severity in enumerate(severities, start=1)
+        ]
+    )
+    assert score == expected_score
+    assert (
+        contract.advisory_completion(score, status, contract.open_findings(report))
+        is expected_advisory
+    )
+
+
+def test_open_findings_preserve_report_order_including_latent() -> None:
+    report = """### Must Fix
+
+None.
+
+### Should Fix
+
+#### [F-1] [MEDIUM] First current finding
+
+#### [F-2] [LOW] Second current finding
+
+### Latent Findings
+
+#### [F-3] [HIGH] Future failure
+
+### Plan Notes
+
+#### [F-4] [LOW] This is not an open finding
+
+### Score Breakdown
+
+| [F-5] LOW | -2 |
+"""
+    findings = contract.open_findings(report)
+    assert findings == [
+        {
+            "id": "F-1",
+            "severity": "MEDIUM",
+            "section": contract.SHOULD_FIX,
+            "title": "First current finding",
+        },
+        {
+            "id": "F-2",
+            "severity": "LOW",
+            "section": contract.SHOULD_FIX,
+            "title": "Second current finding",
+        },
+        {
+            "id": "F-3",
+            "severity": "HIGH",
+            "section": contract.LATENT,
+            "title": "Future failure",
+        },
+    ]
+    assert contract.advisory_completion(95, "passing", findings)
+
+
+def test_advisory_rejects_open_must_fix_even_at_95() -> None:
+    report = "### Must Fix\n\n#### [F-1] [LOW] Blocking finding\n"
+    assert not contract.advisory_completion(
+        98, "passing", contract.open_findings(report)
+    )
+
+
+def test_posted_advisory_branch_precedes_the_fixer() -> None:
+    skill = SKILL_FILE.read_text(encoding="utf-8")
+    branch = skill.split("9. **Branch on the status.**", 1)[1].split("## Budget", 1)[0]
+    assert branch.index("`REVIEW_COMPLETE_WITH_FINDINGS`") < branch.index(
+        "`references/fix-workflow.md`"
+    )
+    assert "Do not invoke the fixer" in branch
+    assert "open_findings" in branch
+    assert "reviewed SHA" in branch
+    assert "post_failed` and stop" in skill
+
+    poster = POSTER_AGENT.read_text(encoding="utf-8")
+    assert "The caller will disposition the open findings" in poster
+    assert "keep metadata status `passing`" in poster
 
 
 def test_a_repository_relative_plan_path_is_accepted() -> None:

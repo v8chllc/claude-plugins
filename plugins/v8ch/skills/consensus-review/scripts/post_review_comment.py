@@ -19,6 +19,7 @@ docstring.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -168,6 +169,18 @@ def build_comment_body(
 ) -> str:
     """Build the full review comment, metadata block first."""
     validate_report(report_text)
+    report_score = resolve_score(report_text)
+    if report_score != score:
+        raise ContractError(
+            f"The report score {report_score} contradicts the posted score {score}."
+        )
+    report_label = status_label(status)
+    heading = f"### Quality Score: {score}/100 — {report_label}"
+    if not re.search(rf"^{re.escape(heading)}$", report_text, re.MULTILINE):
+        raise ContractError(
+            "The report heading must agree with posted status "
+            f"{status!r} and score {score}."
+        )
     metadata = build_metadata(
         cycle=cycle,
         status=status,
