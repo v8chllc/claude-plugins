@@ -82,7 +82,7 @@ Decision: Use SQLite for local dev, PostgreSQL in production
 Date: 2025-05-20
 Rationale: Dev/prod parity not needed for this service; keeps onboarding simple
 Do not reverse: Saves ~15 min of setup per new dev machine
-Evidence: https://github.com/example/service/issues/42
+Evidence: docs/architecture.md (database choice and local setup)
 ```
 
 Use `Evidence` when a source supports the decision and its rationale: an issue

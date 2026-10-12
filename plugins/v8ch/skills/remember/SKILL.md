@@ -521,7 +521,7 @@ except the validated parts allowed in step 6.
    targets from `references/procedural-targets.md` only, fail closed, and a
    patch shown for approval. Carry applicable checkable provenance admitted by
    the contract in `references/types.md` from a decision or error entry into
-   proposed patch when useful, without treating stale or unsupported evidence
+   the proposed patch when useful, without treating stale or unsupported evidence
    as proof.
 8. **Work-item promotions** follow these three parts:
    - **Destination.** Follow the tracking rules in the repository's steering
