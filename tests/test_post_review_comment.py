@@ -34,7 +34,10 @@ Delegation: parallel-subagents. Plan: none.
 **Location:** src/render.py:48
 """
 
-SUMMARY = "- Review passed with a score of 91/100. A fix cycle follows.\n"
+SUMMARY = (
+    "- Review passed with a score of 91/100. "
+    "A fix cycle will address the open findings.\n"
+)
 
 REQUIRED_ARGS = [
     "--delegation-mode",
@@ -165,6 +168,15 @@ def test_summary_rejects_the_wrong_shape(summary: str) -> None:
         module.validate_summary(summary)
 
 
+def test_summary_first_bullet_must_match_the_resolved_outcome() -> None:
+    module = load_post_review_comment()
+    expected = "- Review passed with a score of 95/100. Expected outcome."
+    with pytest.raises(module.ContractError, match="contradicts"):
+        module.validate_summary(
+            "- A different outcome.\n", expected_first_bullet=expected
+        )
+
+
 def test_report_must_carry_merged_evidence() -> None:
     module = load_post_review_comment()
     with pytest.raises(module.ContractError, match="Evidence"):
@@ -213,6 +225,51 @@ def test_post_refuses_a_score_or_status_that_contradicts_the_report(
             findings_opened=2,
             findings_closed=1,
         )
+
+
+def test_advisory_report_comment_and_terminal_signal_agree() -> None:
+    module = load_post_review_comment()
+    report = """### Quality Score: 95/100 — Passing
+
+### Evidence
+
+- **Files examined:** src/render.py
+- **Commands run:** uv run pytest
+
+### Must Fix
+
+None.
+
+### Should Fix
+
+#### [F-1] [MEDIUM] Preserve the payload
+"""
+    outcome = module.resolve_review_outcome(report, score=95, status="passing")
+    body = module.build_comment_body(
+        report_text=report,
+        summary_text=outcome.summary,
+        cycle=6,
+        status="passing",
+        score=95,
+        delegation_mode="parallel-subagents",
+        plan_source="none",
+        reviewed_sha="abc1234",
+        scope_basis="full-diff",
+        files_touched=1,
+        findings_opened=1,
+        findings_closed=0,
+    )
+    signal = sys.modules["review_contract"].completion_signal(
+        outcome,
+        cycle=6,
+        reviewed_sha="abc1234",
+        review_url="https://example.test/review/6",
+        post_succeeded=True,
+    )
+    assert outcome.summary in body
+    assert "#### [F-1] [MEDIUM] Preserve the payload" in body
+    assert signal is not None
+    assert signal["details"]["open_findings"] == list(outcome.findings)
 
 
 def test_comment_body_opens_with_exact_v2_metadata(tmp_path: Path) -> None:
@@ -286,11 +343,18 @@ def test_comment_body_renders_the_template_without_placeholders() -> None:
 def test_status_icons(status: str, icon: str, score: int) -> None:
     """Each status renders its icon; the score must sit in that status's band."""
     module = load_post_review_comment()
+    report = REPORT.replace(
+        "91/100 — Passing", f"{score}/100 — {module.status_label(status)}"
+    )
+    if status == "clean":
+        report = report.replace(
+            "#### [F-1] [HIGH] Empty row list renders a header with no body",
+            "None.",
+        )
+    outcome = module.resolve_review_outcome(report, score=score, status=status)
     body = module.build_comment_body(
-        report_text=REPORT.replace(
-            "91/100 — Passing", f"{score}/100 — {module.status_label(status)}"
-        ),
-        summary_text=SUMMARY,
+        report_text=report,
+        summary_text=outcome.summary,
         cycle=1,
         status=status,
         score=score,

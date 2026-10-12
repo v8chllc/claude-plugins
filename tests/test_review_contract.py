@@ -339,18 +339,138 @@ def test_advisory_rejects_open_must_fix_even_at_95() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("score", "heading", "finding_headings", "cycle"),
+    [
+        (96, "96/100 — Passing", ["[F-1] [LOW] First", "[F-2] [LOW] Second"], 1),
+        (95, "95/100 — Passing", ["[F-1] [MEDIUM] One"], 7),
+    ],
+)
+def test_advisory_outcome_builds_exact_later_cycle_terminal_payload(
+    score: int, heading: str, finding_headings: list[str], cycle: int
+) -> None:
+    report = "\n".join(
+        [
+            f"### Quality Score: {heading}",
+            "",
+            "### Must Fix",
+            "",
+            "None.",
+            "",
+            "### Should Fix",
+            "",
+            *[f"#### {finding}" for finding in finding_headings],
+            "",
+            "### Latent Findings",
+            "",
+            "#### [F-9] [LOW] Latent companion",
+        ]
+    )
+    outcome = contract.resolve_review_outcome(report, score=score, status="passing")
+    signal = contract.completion_signal(
+        outcome,
+        cycle=cycle,
+        reviewed_sha="abc1234",
+        review_url="https://example.test/review/1",
+        post_succeeded=True,
+    )
+    assert signal == {
+        "signal": "REVIEW_COMPLETE_WITH_FINDINGS",
+        "cycle": cycle,
+        "details": {
+            "score": score,
+            "status": "passing",
+            "review_url": "https://example.test/review/1",
+            "reviewed_sha": "abc1234",
+            "open_findings": [
+                *[
+                    {
+                        "id": heading.split("]", 1)[0][1:],
+                        "severity": heading.split("[", 2)[2].split("]", 1)[0],
+                        "section": contract.SHOULD_FIX,
+                        "title": heading.split("] ", 2)[2],
+                    }
+                    for heading in finding_headings
+                ],
+                {
+                    "id": "F-9",
+                    "severity": "LOW",
+                    "section": contract.LATENT,
+                    "title": "Latent companion",
+                },
+            ],
+        },
+    }
+
+
+def test_failed_post_aborts_before_advisory_completion() -> None:
+    report = """### Quality Score: 95/100 — Passing
+
+### Should Fix
+
+#### [F-1] [MEDIUM] One finding
+"""
+    outcome = contract.resolve_review_outcome(report, score=95, status="passing")
+    assert contract.completion_signal(
+        outcome,
+        cycle=4,
+        reviewed_sha="abc1234",
+        review_url=None,
+        post_succeeded=False,
+    ) == {
+        "signal": "ABORT",
+        "cycle": 4,
+        "details": {
+            "reason": "post_failed",
+            "message": "The review comment was not posted.",
+            "score": 95,
+            "review_url": None,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "#### [F-x] [LOW] Bad identifier",
+        "#### [F-1] [INFO] Bad severity",
+        "#### [F-1] Missing severity",
+        "####[F-1] [LOW] Missing heading space",
+    ],
+)
+def test_open_findings_reject_malformed_governed_headings(heading: str) -> None:
+    with pytest.raises(contract.ContractError, match="Malformed finding heading"):
+        contract.open_findings(f"### Should Fix\n\n{heading}\n")
+
+
+def test_open_findings_reject_duplicate_ids_across_governed_sections() -> None:
+    report = """### Should Fix
+
+#### [F-1] [LOW] First
+
+### Latent Findings
+
+#### [F-1] [MEDIUM] Duplicate
+"""
+    with pytest.raises(contract.ContractError, match="Duplicate finding"):
+        contract.open_findings(report)
+
+
 def test_posted_advisory_branch_precedes_the_fixer() -> None:
     skill = SKILL_FILE.read_text(encoding="utf-8")
     assert "Delegate all six roles" in skill
     assert "Only the three reviewers run as one parallel batch" in skill
-    branch = skill.split("9. **Branch on the status.**", 1)[1].split("## Budget", 1)[0]
+    branch = skill.split("9. **Branch on the resolved outcome.**", 1)[1].split(
+        "## Budget", 1
+    )[0]
     assert branch.index("`REVIEW_COMPLETE_WITH_FINDINGS`") < branch.index(
         "`references/fix-workflow.md`"
     )
     assert "Do not invoke the fixer" in branch
-    assert "open_findings" in branch
+    assert "completion_signal" in branch
+    assert "validated findings" in branch
     assert "reviewed SHA" in branch
-    assert "post_failed` and stop" in skill
+    assert "`post_failed`" in skill
     assert "`score`, `status`, `review_url`, `reviewed_sha`, `open_findings`" in skill
 
     poster = POSTER_AGENT.read_text(encoding="utf-8")

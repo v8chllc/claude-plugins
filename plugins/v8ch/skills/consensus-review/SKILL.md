@@ -156,29 +156,36 @@ prompt. Agents do not receive skill variables.
    second time, at either gate, ends the review: emit `EVIDENCE_FAILED` with
    the failed pass names and stop, with no score.
 
+   Resolve the completed report once with
+   `review_contract.resolve_review_outcome(report, score=score, status=status)`.
+   A contract error makes the synthesis incomplete: do not post it. Use this
+   resolved outcome for the summary, the status branch, and any terminal
+   payload; do not parse or classify the findings again.
+
 8. **Return or post.**
    - **No PR/MR number:** return the report as-is, emit `REVIEW_COMPLETE` with
      `review_url` `null`, and stop. A local review never fixes.
    - **PR/MR number:** invoke `v8ch:consensus-review-poster` once with the
-     report, the PR/MR number, the cycle, the status, the score, the delegation
-     mode, the plan source, the reviewed SHA, the scope basis, the blast-radius
-     counts, the repository directory, `${CLAUDE_SKILL_DIR}`, and a scratch
-     directory. Capture the comment URL. If posting fails, emit `ABORT` with
-     `reason` `post_failed` and stop. A failed post never completes a review.
+     report, the resolved outcome, the PR/MR number, the cycle, the status, the
+     score, the delegation mode, the plan source, the reviewed SHA, the scope
+     basis, the blast-radius counts, the repository directory,
+     `${CLAUDE_SKILL_DIR}`, and a scratch directory. Capture whether posting
+     succeeded and the comment URL when it did.
 
-9. **Branch on the status.**
-   - `clean` — emit `REVIEW_COMPLETE` and stop.
-   - `passing` with a score of at least 95, no open Must Fix, and one or more
-     open Should Fix findings — emit `REVIEW_COMPLETE_WITH_FINDINGS` and stop.
-     Use `review_contract.open_findings` on the posted report to populate
-     `open_findings` in report order, including accompanying Latent findings.
-     Carry the exact reviewed SHA from step 3, the posted comment URL, and the
-     synthesizer's score and `passing` status. Do not invoke the fixer. The
-     caller dispositions every open finding after this invocation.
-   - Other `passing` or `failing` results — run `references/fix-workflow.md`,
-     then review again if the budget allows. That workflow returns an outcome;
-     this skill emits the signal, following the precedence list in its Step 5
-     so two identical runs cannot end on different signals.
+9. **Branch on the resolved outcome.**
+   Call `review_contract.completion_signal` with the resolved outcome, posting
+   result, exact reviewed SHA from step 3, comment URL, and cycle. A failed post
+   returns `ABORT`; emit it and stop. A successful `clean` result returns
+   `REVIEW_COMPLETE`. A successful advisory result returns
+   `REVIEW_COMPLETE_WITH_FINDINGS`, including the validated findings in report
+   order and accompanying Latent findings. Emit either returned signal and
+   stop. Do not invoke the fixer for either completion result.
+   - A `passing` result below 95, a non-advisory `passing` result, or a
+     `failing` result returns no completion signal — run
+     `references/fix-workflow.md`, then review again if the budget allows.
+     That workflow returns an outcome; this skill emits the signal, following
+     the precedence list in its Step 5 so two identical runs cannot end on
+     different signals.
 
 ## Budget
 

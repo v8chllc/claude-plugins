@@ -20,6 +20,8 @@ alter the findings, the score, or the status.
 ## Inputs
 
 - **Report** — the synthesizer's output in full.
+- **Resolved outcome** — the `review_contract.resolve_review_outcome` result
+  produced by the skill from that exact report, score, and status.
 - **PR/MR number**, **cycle**, **status**, **score**.
 - **Delegation mode** — `parallel-subagents` or `sequential-fallback`.
 - **Plan source** — the literal `none`, or `supplied: <path or short
@@ -47,7 +49,9 @@ Cite only repository-relative paths of tracked files, or links. Never an
 absolute path, a home-directory path, or an untracked scratch path — the people
 reading this comment have no checkout of your machine.
 
-Match the first bullet to the status:
+Use the resolved outcome's `summary` as the first bullet verbatim. The posting
+script derives the same outcome from the report and rejects a different first
+bullet. Its possible values are:
 
 - `clean` — `- Review passed with a score of N/100. No fixes are required.`
 - `passing` at 95 or above, with no open Must Fix and open Should Fix findings —

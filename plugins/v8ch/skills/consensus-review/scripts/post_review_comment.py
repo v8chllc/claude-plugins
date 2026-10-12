@@ -19,7 +19,6 @@ docstring.
 from __future__ import annotations
 
 import argparse
-import re
 import shutil
 import subprocess
 import sys
@@ -31,6 +30,7 @@ from review_contract import (
     build_metadata,
     extract_quality_score,
     render_metadata_block,
+    resolve_review_outcome,
     status_label,
 )
 
@@ -84,7 +84,9 @@ def read_required_text(path: str | Path, *, label: str) -> str:
     return content
 
 
-def validate_summary(summary_text: str) -> str:
+def validate_summary(
+    summary_text: str, *, expected_first_bullet: str | None = None
+) -> str:
     """Validate the one-to-three bullet summary authored by the poster role."""
     lines = [line.strip() for line in summary_text.splitlines() if line.strip()]
     if not all(line.startswith("- ") for line in lines):
@@ -93,6 +95,11 @@ def validate_summary(summary_text: str) -> str:
         raise ContractError(
             f"The summary must hold {MIN_SUMMARY_BULLETS} to {MAX_SUMMARY_BULLETS} "
             f"bullets, got {len(lines)}."
+        )
+    if expected_first_bullet is not None and lines[0] != expected_first_bullet:
+        raise ContractError(
+            "The first summary bullet contradicts the resolved review outcome; "
+            f"expected {expected_first_bullet!r}."
         )
     return "\n".join(lines)
 
@@ -169,18 +176,7 @@ def build_comment_body(
 ) -> str:
     """Build the full review comment, metadata block first."""
     validate_report(report_text)
-    report_score = resolve_score(report_text)
-    if report_score != score:
-        raise ContractError(
-            f"The report score {report_score} contradicts the posted score {score}."
-        )
-    report_label = status_label(status)
-    heading = f"### Quality Score: {score}/100 — {report_label}"
-    if not re.search(rf"^{re.escape(heading)}$", report_text, re.MULTILINE):
-        raise ContractError(
-            "The report heading must agree with posted status "
-            f"{status!r} and score {score}."
-        )
+    outcome = resolve_review_outcome(report_text, score=score, status=status)
     metadata = build_metadata(
         cycle=cycle,
         status=status,
@@ -205,7 +201,9 @@ def build_comment_body(
                 scope_basis=scope_basis,
                 reviewed_sha=reviewed_sha,
             ),
-            "summary_text": validate_summary(summary_text),
+            "summary_text": validate_summary(
+                summary_text, expected_first_bullet=outcome.summary
+            ),
             "details_text": report_text,
         }
     )

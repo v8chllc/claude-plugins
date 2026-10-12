@@ -81,6 +81,10 @@ _WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 
 SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 QUALITY_SCORE_RE = re.compile(r"^### Quality Score:\s*(\d+)/100\b", re.MULTILINE)
+QUALITY_HEADING_RE = re.compile(
+    r"^### Quality Score:\s*(\d+)/100 — (Fully Clean|Passing|Failing)$",
+    re.MULTILINE,
+)
 FINDING_HEADING_RE = re.compile(
     r"^#### \[(F-\d+)\] \[(CRITICAL|HIGH|MEDIUM|LOW)\] (.+)$"
 )
@@ -128,6 +132,17 @@ class Finding:
                 f"Finding '{self.identifier}' has severity {self.severity!r}; "
                 f"expected one of {', '.join(SEVERITIES)}."
             )
+
+
+@dataclass(frozen=True)
+class ReviewOutcome:
+    """One validated report outcome shared by posting and terminal signaling."""
+
+    score: int
+    status: str
+    findings: tuple[dict[str, str], ...]
+    advisory: bool
+    summary: str
 
 
 def deduction(finding: Finding) -> int:
@@ -179,26 +194,40 @@ def extract_quality_score(report_text: str) -> int | None:
 
 
 def open_findings(report_text: str) -> list[dict[str, str]]:
-    """Read the open findings from a synthesized report in report order."""
+    """Strictly read governed findings from a report in report order.
+
+    Every level-four heading inside a governed section is a finding heading.
+    Rejecting malformed headings and repeated IDs prevents the durable comment
+    and caller-facing terminal payload from describing different finding sets.
+    """
     section: str | None = None
     findings: list[dict[str, str]] = []
+    identifiers: set[str] = set()
     for line in report_text.splitlines():
         if line.startswith("### "):
             section = FINDING_SECTIONS.get(line.strip())
             continue
         if section is None:
             continue
+        if not line.startswith("####"):
+            continue
         match = FINDING_HEADING_RE.match(line)
-        if match:
-            identifier, severity, title = match.groups()
-            findings.append(
-                {
-                    "id": identifier,
-                    "severity": severity,
-                    "section": section,
-                    "title": title,
-                }
+        if not match:
+            raise ContractError(
+                f"Malformed finding heading in section '{section}': {line!r}."
             )
+        identifier, severity, title = match.groups()
+        if identifier in identifiers:
+            raise ContractError(f"Duplicate finding identifier '{identifier}'.")
+        identifiers.add(identifier)
+        findings.append(
+            {
+                "id": identifier,
+                "severity": severity,
+                "section": section,
+                "title": title,
+            }
+        )
     return findings
 
 
@@ -210,6 +239,113 @@ def advisory_completion(
         return False
     sections = [finding["section"] for finding in findings]
     return MUST_FIX not in sections and SHOULD_FIX in sections
+
+
+def resolve_review_outcome(
+    report_text: str, *, score: int, status: str
+) -> ReviewOutcome:
+    """Resolve and validate the single outcome consumed across boundaries."""
+    if status not in STATUSES:
+        raise ContractError(
+            f"Unknown status '{status}'; expected one of {', '.join(STATUSES)}."
+        )
+    _require_int(score, key="score", minimum=SCORE_FLOOR, maximum=SCORE_MAX)
+    validate_status_band(status, score)
+    heading = QUALITY_HEADING_RE.search(report_text)
+    if not heading:
+        raise ContractError(
+            "The report needs an exact '### Quality Score: N/100 — <label>' heading."
+        )
+    report_score = int(heading.group(1))
+    report_label = heading.group(2)
+    if report_score != score or report_label != status_label(status):
+        raise ContractError(
+            "The report Quality Score heading contradicts the resolved "
+            f"status {status!r} and score {score}."
+        )
+
+    findings = tuple(open_findings(report_text))
+    has_blocker = any(finding["section"] in BLOCKING_SECTIONS for finding in findings)
+    if status == STATUS_CLEAN and has_blocker:
+        raise ContractError(
+            "A clean review cannot contain Must Fix or Should Fix findings."
+        )
+    if status == STATUS_PASSING and score >= CLEAN_MIN_SCORE and not has_blocker:
+        raise ContractError(
+            "A passing review at the clean score threshold needs an open blocker."
+        )
+    advisory = advisory_completion(score, status, findings)
+    if status == STATUS_CLEAN:
+        summary = f"- Review passed with a score of {score}/100. No fixes are required."
+    elif advisory:
+        summary = (
+            f"- Review passed with a score of {score}/100. "
+            "The caller will disposition the open findings."
+        )
+    elif status == STATUS_PASSING:
+        summary = (
+            f"- Review passed with a score of {score}/100. "
+            "A fix cycle will address the open findings."
+        )
+    else:
+        summary = (
+            f"- Review failed with a score of {score}/100. "
+            "Fixes are required before merge."
+        )
+    return ReviewOutcome(score, status, findings, advisory, summary)
+
+
+def completion_signal(
+    outcome: ReviewOutcome,
+    *,
+    cycle: int,
+    reviewed_sha: str,
+    review_url: str | None,
+    post_succeeded: bool,
+) -> dict[str, Any] | None:
+    """Build the deterministic terminal signal after the posting attempt.
+
+    ``None`` means the validated result requires the fixer. Posting failure has
+    precedence over every review outcome and can never produce completion.
+    """
+    _require_int(cycle, key="cycle", minimum=1, maximum=None)
+    _require_sha(reviewed_sha, key="reviewed_sha")
+    if not post_succeeded:
+        return {
+            "signal": "ABORT",
+            "cycle": cycle,
+            "details": {
+                "reason": "post_failed",
+                "message": "The review comment was not posted.",
+                "score": outcome.score,
+                "review_url": None,
+            },
+        }
+    if not isinstance(review_url, str) or not review_url:
+        raise ContractError("A successful post requires a non-empty review URL.")
+    if outcome.status == STATUS_CLEAN:
+        return {
+            "signal": "REVIEW_COMPLETE",
+            "cycle": cycle,
+            "details": {
+                "score": outcome.score,
+                "status": outcome.status,
+                "review_url": review_url,
+            },
+        }
+    if outcome.advisory:
+        return {
+            "signal": "REVIEW_COMPLETE_WITH_FINDINGS",
+            "cycle": cycle,
+            "details": {
+                "score": outcome.score,
+                "status": outcome.status,
+                "review_url": review_url,
+                "reviewed_sha": reviewed_sha,
+                "open_findings": list(outcome.findings),
+            },
+        }
+    return None
 
 
 def _require_int(value: object, *, key: str, minimum: int, maximum: int | None) -> int:
