@@ -44,8 +44,8 @@ terminal signal.
   author-verified text-only repairs.
 - **`MUTATION_UNPROVEN`** — an applied code or configuration repair (`fixed`, or
   `partial` where that content changed) has a mutation check the fixer could not
-  confirm. Commit nothing and return `BLOCKERS_REMAIN` naming those findings.
-  A text-only repair never causes this outcome. A `declined` or
+  confirm. Preserve the affected finding IDs and continue to Step 5 without
+  committing. A text-only repair never causes this outcome. A `declined` or
   `work-item-required` finding applies no repair and needs no proof.
 - **`QUALITY_FAILURES`** — the repository's quality commands still fail and the
   fixer could not resolve them. Commit nothing and return `QUALITY_FAILURES` with
