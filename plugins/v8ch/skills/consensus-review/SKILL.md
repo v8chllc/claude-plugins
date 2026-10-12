@@ -1,6 +1,6 @@
 ---
 name: consensus-review
-description: Runs an autonomous, evidence-gated consensus code review. Use when reviewing code changes, before pushing a PR, or as the review step in a development workflow. Runs three independent reviewers in parallel, synthesizes a consequence-ranked report with a 1-100 quality score, and posts one review comment per cycle to the PR or MR. On a PR or MR it also fixes and re-reviews, up to three reviews per invocation. Accepts an optional plan file as review context. Scope defaults to all local changes; also accepts a PR/MR number, a base commit SHA, a branch diff, or an explicit file list.
+description: Runs an autonomous, evidence-gated consensus code review. Use when reviewing code changes, before pushing a PR, or as the review step in a development workflow. Runs three independent reviewers in parallel, synthesizes a consequence-ranked report with a 1-100 quality score, and posts one review comment per cycle to the PR or MR. On a PR or MR it also fixes and re-reviews, up to three reviews per invocation by default or one when the caller declares a single-cycle cap. Accepts an optional plan file as review context. Scope defaults to all local changes; also accepts a PR/MR number, a base commit SHA, a branch diff, or an explicit file list.
 ---
 
 # Consensus Review
@@ -28,7 +28,9 @@ branches. It ends with exactly one terminal signal.
    and the thread is the audit trail.
 2. **Plan file** (optional) — review context only. A plan never sets a severity
    and never deducts points.
-3. **Scope** — resolved by the ladder below.
+3. **Single-cycle cap** (optional, PR/MR only) — when the caller declares it,
+   run at most one review in this invocation. Otherwise use the normal budget.
+4. **Scope** — resolved by the ladder below.
 
 ## Scope ladder
 
@@ -166,17 +168,25 @@ prompt. Agents do not receive skill variables.
      `reason` `post_failed`.
 
 9. **Branch on the status.**
-   - `clean` — emit `REVIEW_COMPLETE` and stop.
+   - `clean` — emit `CAPPED_REVIEW_COMPLETE` with empty `commit_shas` and
+     `work_items` lists when the caller declared the cap; otherwise emit
+     `REVIEW_COMPLETE`. Stop.
    - `passing` or `failing` — run `references/fix-workflow.md`, then review
-     again if the budget allows. That workflow returns an outcome; this skill
-     emits the signal, following the precedence list in its Step 5 so two
-     identical runs cannot end on different signals.
+     again if the budget allows. The capped invocation still runs this normal
+     fix workflow, including its quality and proof checks. It never starts a
+     second review, even if the fixer commits. The workflow returns an outcome;
+     this skill emits the signal, following the precedence list in its Step 5
+     so two identical runs cannot end on different signals.
 
 ## Budget
 
-At most three reviews per invocation. Every invocation gets a fresh budget,
-whatever the PR/MR's cycle count and whichever toolchain wrote the earlier
-cycles. Cycle numbers themselves accumulate with no cap.
+At most three reviews per invocation by default. A caller-declared single-cycle
+cap on a PR/MR changes this invocation's budget to one review. It does not
+change the reviewers, synthesizer, fix workflow, or later invocations. Every
+invocation gets a fresh budget, whatever the PR/MR's cycle count and whichever
+toolchain wrote the earlier cycles. Cycle numbers themselves accumulate with no
+cap. Ignore a single-cycle cap without a PR/MR number: local reviews already
+end after one review and do not fix.
 
 When the third review is still not `clean`, the run ends on the first matching
 signal in the fix workflow's Step 5 precedence list. In short: unresolved
@@ -223,6 +233,7 @@ at that point is `null`; a list with no entries is `[]`.
 | Signal | When | `details` keys |
 | --- | --- | --- |
 | `REVIEW_COMPLETE` | A local review returned its report, or a PR/MR review reached `clean` | `score`, `status`, `review_url` |
+| `CAPPED_REVIEW_COMPLETE` | A caller-capped PR/MR invocation completed its one review and, for `passing` or `failing`, its normal fix workflow; no second review runs | `score`, `status`, `review_url`, `commit_shas`, `work_items` |
 | `NO_DIFF` | Nothing to review | `scope` |
 | `EVIDENCE_FAILED` | A reviewer failed the evidence gate twice | `failed_passes` |
 | `QUALITY_FAILURES` | Quality commands still fail after the fix pass; nothing is committed and the fixer's edits stay in the working tree | `score`, `review_url`, `failed_commands` |
