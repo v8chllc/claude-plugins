@@ -69,7 +69,7 @@ this and prints both the basis and the reason.
 
 ## Roles
 
-Seven roles ship with this plugin. Invoke each by its namespaced name, so a
+Six roles ship with this plugin. Invoke each by its namespaced name, so a
 project-level agent sharing a bare name is never selected:
 
 | Role | Invoke as |
@@ -80,7 +80,6 @@ project-level agent sharing a bare name is never selected:
 | Synthesis | `v8ch:review-synthesizer` |
 | Posting | `v8ch:consensus-review-poster` |
 | Fixing | `v8ch:consensus-review-fixer` |
-| Independent text repair verification | `v8ch:repair-proof-reviewer` |
 
 Only the three reviewers are delegated, and they run as one parallel batch:
 their work is genuinely independent, and none of them reads another's output.
@@ -235,7 +234,8 @@ at that point is `null`; a list with no entries is `[]`.
 For `CAPPED_REVIEW_COMPLETE`, `fixer_outcome` is `COMPLETE`,
 `MUTATION_UNPROVEN`, `QUALITY_FAILURES`, `NO_CHANGE`, or null when a clean
 review skipped fixing. The failure lists are populated only when that outcome
-applies.
+applies. This signal records the reviewed result even when fixing could not
+finish; it does not assert that a pushed fix was reviewed.
 
 | Signal | When | `details` keys |
 | --- | --- | --- |

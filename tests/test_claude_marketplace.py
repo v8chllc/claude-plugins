@@ -42,7 +42,7 @@ def test_marketplace_points_to_valid_plugin_manifest() -> None:
 
     manifest = load_json(plugin_root / ".claude-plugin" / "plugin.json")
     assert manifest["name"] == entry["name"]
-    assert manifest["version"] == "2.0.11"
+    assert manifest["version"] == "2.0.8"
     assert manifest["description"]
 
 
@@ -82,7 +82,6 @@ def test_plugin_agents_use_claude_plugin_frontmatter() -> None:
         "consensus-review-fixer",
         "consensus-review-poster",
         "correctness-reviewer",
-        "repair-proof-reviewer",
         "review-synthesizer",
         "standards-reviewer",
     }
