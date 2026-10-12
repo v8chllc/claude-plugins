@@ -69,7 +69,7 @@ this and prints both the basis and the reason.
 
 ## Roles
 
-Six roles ship with this plugin. Invoke each by its namespaced name, so a
+Seven roles ship with this plugin. Invoke each by its namespaced name, so a
 project-level agent sharing a bare name is never selected:
 
 | Role | Invoke as |
@@ -80,6 +80,7 @@ project-level agent sharing a bare name is never selected:
 | Synthesis | `v8ch:review-synthesizer` |
 | Posting | `v8ch:consensus-review-poster` |
 | Fixing | `v8ch:consensus-review-fixer` |
+| Independent text repair verification | `v8ch:repair-proof-reviewer` |
 
 Only the three reviewers are delegated, and they run as one parallel batch:
 their work is genuinely independent, and none of them reads another's output.
@@ -168,8 +169,9 @@ prompt. Agents do not receive skill variables.
      `reason` `post_failed`.
 
 9. **Branch on the status.**
-   - `clean` — emit `CAPPED_REVIEW_COMPLETE` with empty `commit_shas` and
-     `work_items` lists when the caller declared the cap; otherwise emit
+   - `clean` — emit `CAPPED_REVIEW_COMPLETE` with empty `commit_shas`,
+     `work_items`, `failed_commands`, and `unproven_findings` lists and a null
+     `fixer_outcome` when the caller declared the cap; otherwise emit
      `REVIEW_COMPLETE`. Stop.
    - `passing` or `failing` — run `references/fix-workflow.md`, then review
      again if the budget allows. The capped invocation still runs this normal
@@ -230,10 +232,15 @@ Every run ends with exactly one fenced block as its last output:
 exactly the keys listed below, all of them required. A value that does not exist
 at that point is `null`; a list with no entries is `[]`.
 
+For `CAPPED_REVIEW_COMPLETE`, `fixer_outcome` is `COMPLETE`,
+`MUTATION_UNPROVEN`, `QUALITY_FAILURES`, `NO_CHANGE`, or null when a clean
+review skipped fixing. The failure lists are populated only when that outcome
+applies.
+
 | Signal | When | `details` keys |
 | --- | --- | --- |
 | `REVIEW_COMPLETE` | A local review returned its report, or a PR/MR review reached `clean` | `score`, `status`, `review_url` |
-| `CAPPED_REVIEW_COMPLETE` | A caller-capped PR/MR invocation completed its one review and, for `passing` or `failing`, its normal fix workflow; no second review runs | `score`, `status`, `review_url`, `commit_shas`, `work_items` |
+| `CAPPED_REVIEW_COMPLETE` | A caller-capped PR/MR invocation completed its one review and, for `passing` or `failing`, its normal fix workflow; no second review runs, including after proof or quality failure | `score`, `status`, `review_url`, `commit_shas`, `work_items`, `fixer_outcome`, `failed_commands`, `unproven_findings` |
 | `NO_DIFF` | Nothing to review | `scope` |
 | `EVIDENCE_FAILED` | A reviewer failed the evidence gate twice | `failed_passes` |
 | `QUALITY_FAILURES` | Quality commands still fail after the fix pass; nothing is committed and the fixer's edits stay in the working tree | `score`, `review_url`, `failed_commands` |

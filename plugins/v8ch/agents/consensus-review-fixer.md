@@ -73,33 +73,18 @@ Discover the repository's complete documented quality commands from its steering
 documents and manifests, then run all of them. Record each command and its
 result.
 
-Classify each applied repair by its changed content, not its file extension. A
-**text-only repair** changes only prose that no agent or tool executes or
-interprets as code or configuration. A command, script block, or configuration
-snippet embedded in a document that an agent or tool runs is a code or
-configuration repair. If one finding has both kinds of repair, prove each part
-by its applicable method.
-
-For each text-only repair marked `fixed` or `partial`, inspect the final text
-against the finding and its intended correction. Record an author verification
-in the fix log, naming the finding ID, the inspected correction, and why it
-closes the finding. No mutation check or new automated test is required for
-that repair.
-
-For each code or configuration repair marked `fixed` or `partial`, run a focused
-test or check covering it, then perform a **mutation check**: remove or invert
-the repair, confirm a named check fails, and restore the repair. Record the
-check's name. A code or configuration repair no check can detect is not proven.
+Read `references/repair-proof.md` in the supplied absolute skill directory in
+full and follow its classification and fixer-side proof duties. It is the
+normative repair-proof contract. Record each focused and mutation check the
+contract requires. Describe text-only changes in the dispositions so the
+independent verifier can inspect them; do not verify your own prose repair.
 
 If a quality command still fails and you cannot resolve it, stop before the
 commit, record the failing commands, and report `QUALITY_FAILURES`. Nothing is
 committed in that case.
 
-Only a code or configuration repair needs a confirmed mutation check. If one
-cannot be confirmed, record it as `not confirmed` and report
-`MUTATION_UNPROVEN` with those finding IDs. Nothing is committed then. An
-author-verified text-only repair is proven without that check. A `declined` or
-`work-item-required` finding applies no repair and needs no proof.
+If a fixer-owned proof cannot be confirmed, record it as `not confirmed` and
+report `MUTATION_UNPROVEN` with those finding IDs. Nothing is committed then.
 
 ## Step 4 — Work items
 
@@ -144,11 +129,6 @@ the commit body needs, and nothing is posted as a comment:
 - **[F-1]** — reverting the type guard fails
   `tests/test_recover_context.py::test_rejects_non_integer_cycle`.
 
-## Author Verifications
-
-- **[F-3]** — inspected the revised instruction against the finding and its
-  intended correction; it now states <the correction and why it closes F-3>.
-
 ## Work Items Required
 
 ## Adjacent Defects
@@ -169,6 +149,6 @@ fix workflow commits, and it is the only thing that does.
 
 Report the fix-log path and one terminal line: the disposition counts and one
 of `COMPLETE`, `MUTATION_UNPROVEN`, or `QUALITY_FAILURES`. Use `COMPLETE` when
-all applied repairs have their applicable proof and quality commands pass,
-including when every applied repair is author-verified text only. No narration
-of the work. Then stop.
+the fixer's proof duties and quality commands pass. The fix workflow still
+independently verifies any text-only repairs before accepting the overall
+proof. No narration of the work. Then stop.
