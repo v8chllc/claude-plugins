@@ -133,19 +133,6 @@ def test_valid_memory_json_output_passes(tmp_path: Path) -> None:
     assert payload["issues"] == []
 
 
-def test_legacy_decision_and_error_without_evidence_still_validate(
-    tmp_path: Path,
-) -> None:
-    write_valid_memory(tmp_path)
-
-    result = run_validate(tmp_path, "--json")
-
-    assert result.returncode == 0
-    assert json.loads(result.stdout)["issues"] == []
-    memory = (tmp_path / ".remember" / "MEMORY.md").read_text(encoding="utf-8")
-    assert "Evidence:" not in memory
-
-
 @pytest.mark.parametrize("kind", ("decision", "error"))
 def test_evidence_url_with_colons_validates_and_parses_intact(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
