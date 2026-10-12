@@ -1,3 +1,9 @@
+#!/usr/bin/env uv run
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+# ///
+
 """Executable consensus-review v2 contract for the Claude Code plugin.
 
 Holds the scoring rules (C-1) and the audit-metadata schema (C-5) that
@@ -96,9 +102,9 @@ _WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 
 SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 QUALITY_HEADING_RE = re.compile(
-    r"^### Quality Score:\s*(\d+)/100 — (Fully Clean|Passing|Failing)$",
-    re.MULTILINE,
+    r"^### Quality Score:\s*(\d+)/100 — (Fully Clean|Passing|Failing)$"
 )
+EVIDENCE_HEADING = "### Evidence"
 FINDING_HEADING_RE = re.compile(
     r"^#### \[(F-\d+)\] \[(CRITICAL|HIGH|MEDIUM|LOW)\] (.+)$"
 )
@@ -202,33 +208,61 @@ def status_label(status: str) -> str:
         raise ContractError(f"Unknown status '{status}'.") from None
 
 
-def open_findings(report_text: str) -> list[dict[str, str]]:
-    """Strictly read governed findings from a report in report order.
+def _top_level_lines(report_text: str) -> list[str]:
+    """Return lines outside fenced code blocks, rejecting an unclosed fence."""
+    lines: list[str] = []
+    fence_character: str | None = None
+    fence_length = 0
+    for line in report_text.splitlines():
+        if fence_character is not None:
+            fence_match = re.match(r"^ {0,3}(`+|~+)[ \t]*$", line)
+            if (
+                fence_match
+                and fence_match.group(1)[0] == fence_character
+                and len(fence_match.group(1)) >= fence_length
+            ):
+                fence_character = None
+                fence_length = 0
+            continue
+        fence_match = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+        if fence_match:
+            fence_character = fence_match.group(1)[0]
+            fence_length = len(fence_match.group(1))
+            continue
+        lines.append(line)
+    if fence_character is not None:
+        raise ContractError("The report contains an unclosed fenced code block.")
+    return lines
 
-    Every level-four heading inside a governed section is a finding heading.
-    Rejecting malformed headings and repeated IDs prevents the durable comment
-    and caller-facing terminal payload from describing different finding sets.
-    """
+
+def open_findings(report_text: str) -> list[dict[str, str]]:
+    """Read and validate top-level findings in report order."""
     section: str | None = None
     findings: list[dict[str, str]] = []
-    identifiers: set[str] = set()
-    for line in report_text.splitlines():
+    seen_sections: list[str] = []
+    for line in _top_level_lines(report_text):
         if line.startswith("### "):
             section = FINDING_SECTIONS.get(line.strip())
-            continue
-        if section is None:
+            if section is not None:
+                if section in seen_sections:
+                    raise ContractError(
+                        f"Finding section {line.strip()!r} is duplicated."
+                    )
+                seen_sections.append(section)
             continue
         if not line.startswith("####"):
             continue
         match = FINDING_HEADING_RE.match(line)
+        looks_like_finding = line.startswith(("#### [F", "####[F"))
+        if section is None:
+            if looks_like_finding:
+                raise ContractError(
+                    f"Finding heading {line!r} is outside a finding section."
+                )
+            continue
         if not match:
-            raise ContractError(
-                f"Malformed finding heading in section '{section}': {line!r}."
-            )
+            raise ContractError(f"Malformed finding heading in {section}: {line!r}.")
         identifier, severity, title = match.groups()
-        if identifier in identifiers:
-            raise ContractError(f"Duplicate finding identifier '{identifier}'.")
-        identifiers.add(identifier)
         findings.append(
             {
                 "id": identifier,
@@ -236,6 +270,21 @@ def open_findings(report_text: str) -> list[dict[str, str]]:
                 "section": section,
                 "title": title,
             }
+        )
+
+    expected_sections = list(FINDING_SECTIONS.values())
+    if seen_sections != expected_sections:
+        raise ContractError(
+            "Finding sections must appear exactly once in this order: "
+            + ", ".join(FINDING_SECTIONS)
+            + "."
+        )
+    identifiers = [finding["id"] for finding in findings]
+    expected_ids = [f"F-{number}" for number in range(1, len(findings) + 1)]
+    if identifiers != expected_ids:
+        raise ContractError(
+            "Finding IDs must be unique and sequential in report order; expected "
+            f"{expected_ids}, got {identifiers}."
         )
     return findings
 
@@ -280,7 +329,20 @@ def resolve_review_outcome(
     _require_int(score, key="score", minimum=SCORE_FLOOR, maximum=SCORE_MAX)
     _require_sha(reviewed_sha, key="reviewed_sha")
     validate_status_band(status, score)
-    heading = QUALITY_HEADING_RE.search(report_text)
+    lowered = report_text.lower()
+    if "<details>" in lowered or "</details>" in lowered:
+        raise ContractError("The report contains a <details> tag.")
+    top_level_lines = _top_level_lines(report_text)
+    if EVIDENCE_HEADING not in top_level_lines:
+        raise ContractError("The report is missing its merged '### Evidence' section.")
+    quality_headings = [
+        line for line in top_level_lines if line.startswith("### Quality Score:")
+    ]
+    if len(quality_headings) != 1:
+        raise ContractError(
+            "The report must contain exactly one Quality Score heading."
+        )
+    heading = QUALITY_HEADING_RE.fullmatch(quality_headings[0])
     if not heading:
         raise ContractError(
             "The report needs an exact '### Quality Score: N/100 — <label>' heading."
@@ -294,14 +356,16 @@ def resolve_review_outcome(
         )
 
     findings = tuple(open_findings(report_text))
-    has_blocker = any(finding["section"] in BLOCKING_SECTIONS for finding in findings)
-    if status == STATUS_CLEAN and has_blocker:
+    scored_findings = [
+        Finding(finding["id"], finding["section"], finding["severity"])
+        for finding in findings
+    ]
+    computed_score = score_findings(scored_findings)
+    computed_status = review_status(computed_score, scored_findings)
+    if score != computed_score or status != computed_status:
         raise ContractError(
-            "A clean review cannot contain Must Fix or Should Fix findings."
-        )
-    if status == STATUS_PASSING and score >= CLEAN_MIN_SCORE and not has_blocker:
-        raise ContractError(
-            "A passing review at the clean score threshold needs an open blocker."
+            "The report score or status contradicts its finding deductions and "
+            "open blockers."
         )
     advisory = advisory_completion(score, status, findings)
     summary = outcome_summary(score, status, advisory)
@@ -368,6 +432,17 @@ def deserialize_outcome(payload: object) -> ReviewOutcome:
         if not finding["title"]:
             raise ContractError("Resolved outcome finding title must not be empty.")
         findings.append(finding)
+    expected_ids = [f"F-{number}" for number in range(1, len(findings) + 1)]
+    if [finding["id"] for finding in findings] != expected_ids:
+        raise ContractError("Resolved outcome finding IDs are not sequential.")
+    scored_findings = [
+        Finding(finding["id"], finding["section"], finding["severity"])
+        for finding in findings
+    ]
+    if score_findings(scored_findings) != score:
+        raise ContractError("Resolved outcome score contradicts its findings.")
+    if review_status(score, scored_findings) != status:
+        raise ContractError("Resolved outcome status contradicts its findings.")
     advisory = advisory_completion(score, status, findings)
     has_blocker = any(finding["section"] in BLOCKING_SECTIONS for finding in findings)
     if status == STATUS_CLEAN and has_blocker:

@@ -16,7 +16,7 @@ FIXTURES_DIR = REPO_ROOT / "tests/fixtures/consensus-review"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-REPORT = """### Quality Score: 91/100 — Passing
+REPORT = """### Quality Score: 90/100 — Passing
 
 ### Run Provenance
 
@@ -32,10 +32,18 @@ Delegation: parallel-subagents. Plan: none.
 #### [F-1] [HIGH] Empty row list renders a header with no body
 
 **Location:** src/render.py:48
+
+### Should Fix
+
+None.
+
+### Latent Findings
+
+None.
 """
 
 SUMMARY = (
-    "- Review passed with a score of 91/100. "
+    "- Review passed with a score of 90/100. "
     "A fix cycle will address the open findings.\n"
 )
 
@@ -82,7 +90,7 @@ def write_inputs(
     contract = sys.modules["review_contract"]
     outcome = contract.resolve_review_outcome(
         outcome_report,
-        score=91,
+        score=90,
         status="passing",
         reviewed_sha="1a2b3c4",
     )
@@ -197,7 +205,7 @@ def test_summary_first_bullet_must_match_the_resolved_outcome() -> None:
 def test_report_must_carry_merged_evidence() -> None:
     module = load_post_review_comment()
     with pytest.raises(module.ContractError, match="Evidence"):
-        module.validate_report("### Quality Score: 91/100 — Passing\n")
+        module.validate_report("### Quality Score: 90/100 — Passing\n")
 
 
 def test_report_must_not_nest_a_details_block() -> None:
@@ -221,14 +229,14 @@ def test_posting_accepts_only_the_resolved_outcome_source() -> None:
 @pytest.mark.parametrize(
     "report",
     [
-        REPORT.replace("91/100", "95/100"),
+        REPORT.replace("90/100", "95/100"),
         REPORT.replace("— Passing", "— Fully Clean"),
     ],
 )
 def test_post_refuses_an_outcome_that_contradicts_the_report(report: str) -> None:
     module = load_post_review_comment()
     outcome = module.resolve_review_outcome(
-        REPORT, score=91, status="passing", reviewed_sha="1a2b3c4"
+        REPORT, score=90, status="passing", reviewed_sha="1a2b3c4"
     )
     with pytest.raises(module.ContractError):
         module.build_comment_body(
@@ -261,6 +269,10 @@ None.
 ### Should Fix
 
 #### [F-1] [MEDIUM] Preserve the payload
+
+### Latent Findings
+
+None.
 """
     outcome = module.resolve_review_outcome(
         report, score=95, status="passing", reviewed_sha="abc1234"
@@ -294,7 +306,7 @@ None.
 def test_comment_body_opens_with_exact_v2_metadata(tmp_path: Path) -> None:
     module = load_post_review_comment()
     outcome = module.resolve_review_outcome(
-        REPORT, score=91, status="passing", reviewed_sha="1a2b3c4"
+        REPORT, score=90, status="passing", reviewed_sha="1a2b3c4"
     )
     body = module.build_comment_body(
         report_text=REPORT,
@@ -321,7 +333,7 @@ def test_comment_body_opens_with_exact_v2_metadata(tmp_path: Path) -> None:
         "reviewed_sha": "1a2b3c4",
         "schema_version": 2,
         "scope_basis": "full-diff",
-        "score": 91,
+        "score": 90,
         "status": "passing",
         "type": "review",
     }
@@ -331,7 +343,7 @@ def test_comment_body_opens_with_exact_v2_metadata(tmp_path: Path) -> None:
 def test_comment_body_renders_the_template_without_placeholders() -> None:
     module = load_post_review_comment()
     outcome = module.resolve_review_outcome(
-        REPORT, score=91, status="passing", reviewed_sha="1a2b3c4"
+        REPORT, score=90, status="passing", reviewed_sha="1a2b3c4"
     )
     body = module.build_comment_body(
         report_text=REPORT,
@@ -346,7 +358,7 @@ def test_comment_body_renders_the_template_without_placeholders() -> None:
         findings_closed=1,
     )
     assert "### \U0001f7e1 Consensus Review — Cycle 02" in body
-    assert "*Score: 91/100 (Passing).*" in body
+    assert "*Score: 90/100 (Passing).*" in body
     assert (
         "Delegation: parallel-subagents. Plan: supplied: .plan/feature.md. "
         "Scope: delta-since:9f3a25e. Reviewed: 1a2b3c4." in body
@@ -359,18 +371,23 @@ def test_comment_body_renders_the_template_without_placeholders() -> None:
 
 @pytest.mark.parametrize(
     ("status", "icon", "score"),
-    [("clean", "✅", 96), ("passing", "\U0001f7e1", 91), ("failing", "❌", 70)],
+    [("clean", "✅", 100), ("passing", "\U0001f7e1", 90), ("failing", "❌", 80)],
 )
 def test_status_icons(status: str, icon: str, score: int) -> None:
     """Each status renders its icon; the score must sit in that status's band."""
     module = load_post_review_comment()
     report = REPORT.replace(
-        "91/100 — Passing", f"{score}/100 — {module.status_label(status)}"
+        "90/100 — Passing", f"{score}/100 — {module.status_label(status)}"
     )
     if status == "clean":
         report = report.replace(
             "#### [F-1] [HIGH] Empty row list renders a header with no body",
             "None.",
+        )
+    elif status == "failing":
+        report = report.replace(
+            "**Location:** src/render.py:48",
+            "**Location:** src/render.py:48\n\n#### [F-2] [HIGH] Another failure",
         )
     outcome = module.resolve_review_outcome(
         report, score=score, status=status, reviewed_sha="1a2b3c4"
@@ -594,17 +611,17 @@ def test_a_closing_details_tag_is_rejected_too() -> None:
 
 @pytest.mark.parametrize(
     ("status", "score"),
-    [("clean", 60), ("clean", 94), ("passing", 60), ("failing", 91)],
+    [("clean", 60), ("clean", 94), ("passing", 60), ("failing", 90)],
 )
 def test_a_status_contradicting_the_score_is_refused(status: str, score: int) -> None:
     """The comment shows one verdict and the metadata another; recovery routes
     on the metadata, so the pair must agree before publication."""
     module = load_post_review_comment()
     outcome = module.resolve_review_outcome(
-        REPORT, score=91, status="passing", reviewed_sha="1a2b3c4"
+        REPORT, score=90, status="passing", reviewed_sha="1a2b3c4"
     )
     report = REPORT.replace(
-        "91/100 — Passing", f"{score}/100 — {module.status_label(status)}"
+        "90/100 — Passing", f"{score}/100 — {module.status_label(status)}"
     )
     with pytest.raises(module.ContractError):
         module.build_comment_body(
