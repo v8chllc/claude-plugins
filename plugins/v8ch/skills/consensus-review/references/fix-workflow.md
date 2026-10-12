@@ -60,11 +60,12 @@ terminal signal.
 
 For `COMPLETE`, invoke `v8ch:repair-proof-reviewer` with the synthesized report,
 the fix log, the repository-relative fixer diff, the repository directory, and
-the absolute skill directory. The role reads the shared contract and returns an
-independent verification record. Append that record to the fix log. If it ends
-in `PROOF_UNPROVEN`, preserve the affected finding IDs and continue to Step 5
-without committing. When there are no text-only repairs, its `None.` record is
-the independent confirmation that no text proof is required.
+the expected text-only finding IDs derived from the fixer's result, the
+repository directory, and the absolute skill directory. The role reads the
+shared contract and returns an independent verification record. Validate the
+complete record against the contract and append it to the fix log. Any invalid
+or `PROOF_UNPROVEN` result preserves the affected finding IDs and continues to
+Step 5 without committing.
 
 ## Step 3 — Commit
 

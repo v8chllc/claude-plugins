@@ -17,6 +17,7 @@ def test_repair_proof_policy_has_one_normative_source() -> None:
     contract = read(SKILL_DIR / "references/repair-proof.md")
     fixer = read(AGENT_DIR / "consensus-review-fixer.md")
     workflow = read(SKILL_DIR / "references/fix-workflow.md")
+    reviewer = read(AGENT_DIR / "repair-proof-reviewer.md")
 
     assert "normative contract" in contract
     assert "references/repair-proof.md" in fixer
@@ -29,6 +30,11 @@ def test_repair_proof_policy_has_one_normative_source() -> None:
         assert duplicated_rule in contract
         assert duplicated_rule not in fixer
         assert duplicated_rule not in workflow
+        assert duplicated_rule not in reviewer
+
+    assert "## Independent verification procedure" in contract
+    assert "correction inspected and reason" in contract
+    assert "accepted` | `rejected" not in reviewer
 
 
 def test_text_repairs_require_an_independent_read_only_reviewer() -> None:
@@ -44,6 +50,27 @@ def test_text_repairs_require_an_independent_read_only_reviewer() -> None:
     )
     assert "PROOF_UNPROVEN" in workflow
     assert "independent text repair verification records" in workflow
+
+
+def test_independent_verification_fails_closed() -> None:
+    contract = read(SKILL_DIR / "references/repair-proof.md")
+    workflow = read(SKILL_DIR / "references/fix-workflow.md")
+
+    assert "derive the expected text-only finding IDs" in contract
+    assert "every expected ID occurs\nexactly once as `accepted`" in contract
+    assert "the terminal marker alone is insufficient" in contract
+    for invalid_result in (
+        "missing",
+        "malformed",
+        "duplicate",
+        "rejected",
+        "unexpected",
+        "incomplete",
+    ):
+        assert invalid_result in contract
+    assert "missing or incorrect terminal marker" in contract
+    assert "expected text-only finding IDs derived from the fixer's result" in workflow
+    assert "Validate the\ncomplete record against the contract" in workflow
 
 
 def test_capped_review_routes_before_fixer_failure_signals() -> None:
