@@ -271,24 +271,36 @@ def test_review_checks_the_destination_before_proposing() -> None:
     assert "Reclassify the entry as `remove`" in section
 
 
-def test_review_scopes_candidate_search_to_the_destination_repository() -> None:
+def test_review_candidate_search_uses_the_resolved_destination_set() -> None:
     section = normalized(review_step_block(review_step_number("Destination check")))
 
-    assert (
-        "resolve the destination repository required by the tracking rules" in section
-    )
+    assert "Resolve the complete destination repository set once" in section
+    assert "Use the same resolved set for candidate searches here" in section
+    assert "use each repository in the resolved destination set" in section
     assert "gh issue list --repo owner/repo" in section
     assert "gh search issues --repo owner/repo" in section
 
 
-def test_review_routes_promotions_through_their_write_paths() -> None:
-    section = review_section()
+def test_review_destination_set_covers_fallback_and_multi_repository_rules() -> None:
+    section = normalized(review_step_block(review_step_number("Destination check")))
 
-    assert f"**Steering promotions** follow {PROCEDURAL_WRITE}'s dedupe" in section
-    assert "fail closed" in section
-    assert "tracking rules in the repository's steering" in section
-    assert "propose an issue in the current repository" in section
-    assert "propose the parent too" in section
+    assert "With no tracking rules, use the current checkout repository" in section
+    assert "Include every repository where those rules require" in section
+    assert "a work item or its parent" in section
+
+
+def test_review_routes_promotions_through_their_write_paths() -> None:
+    steering = normalized(review_step_block(review_step_number("Steering promotions")))
+    work_items = normalized(
+        review_step_block(review_step_number("Work-item promotions"))
+    )
+
+    assert f"**Steering promotions** follow {PROCEDURAL_WRITE}'s dedupe" in steering
+    assert "fail closed" in steering
+    assert "Use the destination repository set resolved in step" in work_items
+    assert "Follow the same tracking rules" in work_items
+    assert "propose the issue in the current checkout repository" in work_items
+    assert "propose the parent" in work_items
 
 
 def test_review_removes_promoted_entries_without_a_pointer() -> None:
