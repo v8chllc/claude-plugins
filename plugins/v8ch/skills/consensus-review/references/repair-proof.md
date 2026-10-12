@@ -32,13 +32,45 @@ not attest to its correctness.
 A `declined` or `work-item-required` finding applies no repair and needs no
 proof.
 
+## Independent verification procedure
+
+Before invoking the reviewer, derive the expected text-only finding IDs from
+the fixer's dispositions and repository-relative diff. Include every `fixed`
+finding whose applied repair has a text-only part and every `partial` finding
+where a text-only part changed. Pass that expected set to the reviewer with the
+other inputs.
+
+The reviewer reads the synthesized finding, the fix log, and the final changed
+text for each expected ID. It compares the repair with the finding's intended
+correction without raising new findings or judging code and configuration
+parts. Its complete result uses this schema:
+
+```markdown
+## Independent Text Repair Verification
+
+- **[F-N]** — `accepted` | `rejected` — <correction inspected and reason>
+```
+
+There must be exactly one record for every expected ID and no records for other
+IDs. When the expected set is empty, use `None.` instead of a finding record.
+End with `VERIFIED` only when every expected repair is present and accepted;
+otherwise end with `PROOF_UNPROVEN` followed by the rejected or missing finding
+IDs.
+
 ## Acceptance
 
 A repair is proven only when every code or configuration part has a confirmed
 mutation check and every text-only part has an independent `accepted` record.
-The fix workflow must check both before committing. Missing or rejected proof
-returns `MUTATION_UNPROVEN`, names the affected finding IDs, and commits
-nothing. Repository quality commands must also pass before any commit.
+The fix workflow must validate the entire independent result before committing;
+the terminal marker alone is insufficient. It accepts the result only when the
+heading occurs once, every record matches the schema, every expected ID occurs
+exactly once as `accepted`, no unexpected ID occurs, `None.` is used only for an
+empty expected set, and the last nonblank line is `VERIFIED`.
+
+A missing, malformed, duplicate, rejected, unexpected, or incomplete record,
+or a missing or incorrect terminal marker, is `PROOF_UNPROVEN`. Name every
+affected finding ID and commit nothing. Repository quality commands must also
+pass before any commit.
 
 The commit body records the mutation checks and the independent text repair
 verification records.
