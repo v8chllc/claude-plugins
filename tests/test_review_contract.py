@@ -341,6 +341,8 @@ def test_advisory_rejects_open_must_fix_even_at_95() -> None:
 
 def test_posted_advisory_branch_precedes_the_fixer() -> None:
     skill = SKILL_FILE.read_text(encoding="utf-8")
+    assert "Delegate all six roles" in skill
+    assert "Only the three reviewers run as one parallel batch" in skill
     branch = skill.split("9. **Branch on the status.**", 1)[1].split("## Budget", 1)[0]
     assert branch.index("`REVIEW_COMPLETE_WITH_FINDINGS`") < branch.index(
         "`references/fix-workflow.md`"
@@ -349,6 +351,7 @@ def test_posted_advisory_branch_precedes_the_fixer() -> None:
     assert "open_findings" in branch
     assert "reviewed SHA" in branch
     assert "post_failed` and stop" in skill
+    assert "`score`, `status`, `review_url`, `reviewed_sha`, `open_findings`" in skill
 
     poster = POSTER_AGENT.read_text(encoding="utf-8")
     assert "The caller will disposition the open findings" in poster
