@@ -38,6 +38,21 @@ def build_findings(raw: list[dict[str, Any]]) -> list[contract.Finding]:
     ]
 
 
+def score_breakdown(severities: list[str], score: int) -> str:
+    rows = [
+        "### Score Breakdown",
+        "",
+        "| Finding | Deduction |",
+        "| --- | --- |",
+    ]
+    rows.extend(
+        f"| [F-{index}] {severity} | −{contract.SEVERITY_DEDUCTIONS[severity]} |"
+        for index, severity in enumerate(severities, start=1)
+    )
+    rows.append(f"| **Final score** | **{score}/100** |")
+    return "\n".join(rows)
+
+
 def metadata_case(case: dict[str, Any]) -> dict[str, Any]:
     payload = dict(METADATA["valid"])
     payload.update(case.get("overrides", {}))
@@ -365,6 +380,14 @@ def test_advisory_outcome_builds_exact_later_cycle_terminal_payload(
             "### Latent Findings",
             "",
             "None.",
+            "",
+            score_breakdown(
+                [
+                    finding.split("[", 2)[2].split("]", 1)[0]
+                    for finding in finding_headings
+                ],
+                score,
+            ),
         ]
     )
     outcome = contract.resolve_review_outcome(
@@ -415,6 +438,13 @@ None.
 ### Latent Findings
 
 None.
+
+### Score Breakdown
+
+| Finding | Deduction |
+| --- | --- |
+| [F-1] MEDIUM | −5 |
+| **Final score** | **95/100** |
 """
     outcome = contract.resolve_review_outcome(
         report, score=95, status="passing", reviewed_sha="abc1234"
@@ -458,6 +488,13 @@ None.
 ### Latent Findings
 
 None.
+
+### Score Breakdown
+
+| Finding | Deduction |
+| --- | --- |
+| [F-1] MEDIUM | −5 |
+| **Final score** | **95/100** |
 """,
         encoding="utf-8",
     )
@@ -664,6 +701,7 @@ def test_outcome_commands_route_the_exact_posted_review(
                 *findings,
                 "### Latent Findings",
                 "None.",
+                score_breakdown(severities, score),
             ]
         ),
         encoding="utf-8",
@@ -745,6 +783,13 @@ None.
 ```markdown
 #### [F-2] [HIGH] Example only
 ```
+
+### Score Breakdown
+
+| Finding | Deduction |
+| --- | --- |
+| [F-1] MEDIUM | −5 |
+| **Final score** | **95/100** |
 """
     outcome = contract.resolve_review_outcome(
         report, score=95, status="passing", reviewed_sha="abc1234"
@@ -775,6 +820,14 @@ None.
 ### Latent Findings
 
 #### [F-2] [LOW] Latent companion
+
+### Score Breakdown
+
+| Finding | Deduction |
+| --- | --- |
+| [F-1] LOW | −2 |
+| [F-2] LOW | −2 |
+| **Final score** | **96/100** |
 """
     outcome = contract.resolve_review_outcome(
         report, score=96, status="passing", reviewed_sha="abc1234"
@@ -808,6 +861,13 @@ None.
 ### Latent Findings
 
 None.
+
+### Score Breakdown
+
+| Finding | Deduction |
+| --- | --- |
+| [F-1] MEDIUM | −5 |
+| **Final score** | **95/100** |
 """
     with pytest.raises(contract.ContractError, match="Finding sections"):
         contract.resolve_review_outcome(
@@ -823,6 +883,76 @@ None.
             status="passing",
             reviewed_sha="abc1234",
         )
+
+
+@pytest.mark.parametrize(
+    "contradiction",
+    [
+        "| F-1 | -2 |",
+        "| F-1 | -5 |\n| **Final score** | **98/100** |",
+    ],
+)
+def test_report_rejects_a_contradictory_score_breakdown(contradiction: str) -> None:
+    report = """### Quality Score: 95/100 — Passing
+
+### Evidence
+
+### Must Fix
+
+None.
+
+### Should Fix
+
+#### [F-1] [MEDIUM] Current finding
+
+### Latent Findings
+
+None.
+
+### Score Breakdown
+
+| Finding | Deduction |
+| --- | --- |
+| F-1 | -5 |
+| **Final score** | **95/100** |
+"""
+    breakdown = "| F-1 | -5 |\n| **Final score** | **95/100** |"
+    with pytest.raises(contract.ContractError, match="Score Breakdown"):
+        contract.resolve_review_outcome(
+            report.replace(breakdown, contradiction),
+            score=95,
+            status="passing",
+            reviewed_sha="abc1234",
+        )
+
+
+def test_deserialization_uses_the_authoritative_status_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    finding = {
+        "id": "F-1",
+        "severity": "LOW",
+        "section": contract.SHOULD_FIX,
+        "title": "Current finding",
+    }
+    monkeypatch.setattr(
+        contract,
+        "review_status",
+        lambda score, findings: contract.STATUS_CLEAN,
+    )
+    payload = {
+        "schema_version": contract.OUTCOME_SCHEMA_VERSION,
+        "score": 98,
+        "status": contract.STATUS_CLEAN,
+        "reviewed_sha": "abc1234",
+        "findings": [finding],
+        "advisory": False,
+        "summary": contract.outcome_summary(98, contract.STATUS_CLEAN, False),
+    }
+
+    outcome = contract.deserialize_outcome(payload)
+
+    assert outcome.status == contract.STATUS_CLEAN
 
 
 @pytest.mark.parametrize(

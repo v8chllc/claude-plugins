@@ -40,6 +40,13 @@ None.
 ### Latent Findings
 
 None.
+
+### Score Breakdown
+
+| Finding | Deduction |
+| --- | --- |
+| [F-1] HIGH | −10 |
+| **Final score** | **90/100** |
 """
 
 SUMMARY = (
@@ -273,6 +280,13 @@ None.
 ### Latent Findings
 
 None.
+
+### Score Breakdown
+
+| Finding | Deduction |
+| --- | --- |
+| [F-1] MEDIUM | −5 |
+| **Final score** | **95/100** |
 """
     outcome = module.resolve_review_outcome(
         report, score=95, status="passing", reviewed_sha="abc1234"
@@ -384,10 +398,20 @@ def test_status_icons(status: str, icon: str, score: int) -> None:
             "#### [F-1] [HIGH] Empty row list renders a header with no body",
             "None.",
         )
+        report = report.replace(
+            "| [F-1] HIGH | −10 |\n| **Final score** | **90/100** |",
+            "| **Final score** | **100/100** |",
+        )
     elif status == "failing":
         report = report.replace(
             "**Location:** src/render.py:48",
             "**Location:** src/render.py:48\n\n#### [F-2] [HIGH] Another failure",
+        )
+        report = report.replace(
+            "| [F-1] HIGH | −10 |\n| **Final score** | **90/100** |",
+            "| [F-1] HIGH | −10 |\n"
+            "| [F-2] HIGH | −10 |\n"
+            "| **Final score** | **80/100** |",
         )
     outcome = module.resolve_review_outcome(
         report, score=score, status=status, reviewed_sha="1a2b3c4"

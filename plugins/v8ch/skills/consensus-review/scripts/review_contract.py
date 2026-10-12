@@ -105,8 +105,16 @@ QUALITY_HEADING_RE = re.compile(
     r"^### Quality Score:\s*(\d+)/100 — (Fully Clean|Passing|Failing)$"
 )
 EVIDENCE_HEADING = "### Evidence"
+SCORE_BREAKDOWN_HEADING = "### Score Breakdown"
 FINDING_HEADING_RE = re.compile(
     r"^#### \[(F-\d+)\] \[(CRITICAL|HIGH|MEDIUM|LOW)\] (.+)$"
+)
+SCORE_BREAKDOWN_FINDING_RE = re.compile(
+    r"^\|\s*\[?(F-\d+)\]?(?:\s+(CRITICAL|HIGH|MEDIUM|LOW))?\s*"
+    r"\|\s*[−-](\d+)\s*\|$"
+)
+SCORE_BREAKDOWN_FINAL_RE = re.compile(
+    r"^\|\s*\*\*Final score\*\*\s*\|\s*\*\*(\d+)/100\*\*\s*\|$"
 )
 FINDING_SECTIONS = {
     "### Must Fix": MUST_FIX,
@@ -289,6 +297,65 @@ def open_findings(report_text: str) -> list[dict[str, str]]:
     return findings
 
 
+def validate_score_breakdown(
+    top_level_lines: list[str], findings: Iterable[Finding], score: int
+) -> None:
+    """Validate the durable score table against the governed findings."""
+    heading_indexes = [
+        index
+        for index, line in enumerate(top_level_lines)
+        if line.strip() == SCORE_BREAKDOWN_HEADING
+    ]
+    if len(heading_indexes) != 1:
+        raise ContractError("The report must contain exactly one Score Breakdown.")
+
+    rows: list[str] = []
+    for line in top_level_lines[heading_indexes[0] + 1 :]:
+        if line.startswith("### "):
+            break
+        if line.strip():
+            rows.append(line.strip())
+
+    if (
+        len(rows) < 3
+        or not re.fullmatch(r"\|\s*Finding\s*\|\s*Deduction\s*\|", rows[0])
+        or not re.fullmatch(r"\|\s*:?-{3,}:?\s*\|\s*:?-{3,}:?\s*\|", rows[1])
+    ):
+        raise ContractError("The report Score Breakdown has an invalid table header.")
+
+    expected = list(findings)
+    actual: list[tuple[str, str | None, int]] = []
+    final_scores: list[int] = []
+    for breakdown_row in rows[2:]:
+        finding_match = SCORE_BREAKDOWN_FINDING_RE.fullmatch(breakdown_row)
+        if finding_match:
+            identifier, severity, amount = finding_match.groups()
+            actual.append((identifier, severity, int(amount)))
+            continue
+        final_match = SCORE_BREAKDOWN_FINAL_RE.fullmatch(breakdown_row)
+        if final_match:
+            final_scores.append(int(final_match.group(1)))
+            continue
+        if re.fullmatch(r"\|\s*Plan notes \(\d+\)\s*\|\s*0\s*\|", breakdown_row):
+            continue
+        raise ContractError(f"Invalid Score Breakdown row: {breakdown_row!r}.")
+
+    if len(final_scores) != 1 or final_scores[0] != score:
+        raise ContractError("The report Score Breakdown final score is inconsistent.")
+    if len(actual) != len(expected):
+        raise ContractError("The report Score Breakdown findings are inconsistent.")
+    for actual_row, finding in zip(actual, expected, strict=True):
+        identifier, severity, amount = actual_row
+        if (
+            identifier != finding.identifier
+            or severity not in (None, finding.severity)
+            or amount != deduction(finding)
+        ):
+            raise ContractError(
+                "The report Score Breakdown deductions are inconsistent."
+            )
+
+
 def advisory_completion(
     score: int, status: str, findings: Iterable[dict[str, str]]
 ) -> bool:
@@ -367,6 +434,7 @@ def resolve_review_outcome(
             "The report score or status contradicts its finding deductions and "
             "open blockers."
         )
+    validate_score_breakdown(top_level_lines, scored_findings, score)
     advisory = advisory_completion(score, status, findings)
     summary = outcome_summary(score, status, advisory)
     return ReviewOutcome(score, status, reviewed_sha, findings, advisory, summary)
@@ -444,11 +512,6 @@ def deserialize_outcome(payload: object) -> ReviewOutcome:
     if review_status(score, scored_findings) != status:
         raise ContractError("Resolved outcome status contradicts its findings.")
     advisory = advisory_completion(score, status, findings)
-    has_blocker = any(finding["section"] in BLOCKING_SECTIONS for finding in findings)
-    if status == STATUS_CLEAN and has_blocker:
-        raise ContractError("A clean outcome cannot contain blocking findings.")
-    if status == STATUS_PASSING and score >= CLEAN_MIN_SCORE and not has_blocker:
-        raise ContractError("A passing outcome at 95 or above needs an open blocker.")
     if payload["advisory"] is not advisory:
         raise ContractError("Resolved outcome advisory flag contradicts its findings.")
     if not isinstance(payload["summary"], str):
