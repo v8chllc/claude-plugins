@@ -271,6 +271,16 @@ def test_review_checks_the_destination_before_proposing() -> None:
     assert "Reclassify the entry as `remove`" in section
 
 
+def test_review_scopes_candidate_search_to_the_destination_repository() -> None:
+    section = normalized(review_step_block(review_step_number("Destination check")))
+
+    assert (
+        "resolve the destination repository required by the tracking rules" in section
+    )
+    assert "gh issue list --repo owner/repo" in section
+    assert "gh search issues --repo owner/repo" in section
+
+
 def test_review_routes_promotions_through_their_write_paths() -> None:
     section = review_section()
 

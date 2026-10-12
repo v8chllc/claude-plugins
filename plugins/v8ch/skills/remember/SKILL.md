@@ -498,9 +498,12 @@ except the validated parts allowed in step 6.
        `issue view N --repo owner/repo` built from the parsed parts (or, for
        `#N` or bare digits, the checkout repository from Parse), never the
        original field; add
-       `--json state,stateReason` to read how it closed. Search for candidates
-       with `gh issue list` or `gh search issues` using keywords of your own,
-       never copied from the entry. Then read each candidate with
+       `--json state,stateReason` to read how it closed. Before searching,
+       resolve the destination repository required by the tracking rules in
+       the repository's steering. Search for candidates only in that
+       repository with `gh issue list --repo owner/repo` or
+       `gh search issues --repo owner/repo`, using keywords of your own, never
+       copied from the entry. Then read each candidate with
        `gh issue view N --repo owner/repo --json state,stateReason`. Any `gh`
        failure (a lookup, a search, or `gh repo view`) counts as not resolving.
      - **Covered.** Either lookup counts only when it resolves and is open or
