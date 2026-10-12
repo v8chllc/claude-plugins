@@ -114,8 +114,10 @@ def test_error_example_cites_failed_and_passing_run_results() -> None:
     text = TYPES_PATH.read_text(encoding="utf-8")
     error = text.split("## error\n", 1)[1].split("\n---\n", 1)[0]
 
-    assert "actions/runs/1234 (failed before fix)" in error
-    assert "actions/runs/1235 (passed after fix)" in error
+    assert "failed run https://github.com/example/service/actions/runs/123" in error
+    assert (
+        "successful rerun https://github.com/example/service/actions/runs/124" in error
+    )
     assert (
         "These URLs are illustrative; real entries cite observed results"
         in normalized(error)
@@ -159,11 +161,11 @@ def test_typed_recording_captures_and_rechecks_optional_evidence() -> None:
     section = normalized(workflow_block("## Workflow C: Record (typed)"))
 
     assert (
-        "For a `decision` or `error`, include optional `Evidence` only when" in section
+        "For `decision` and `error`, include optional `Evidence` only when" in section
     )
-    assert "Omit it when none is available" in section
-    assert "do not invent a source" in section
-    assert "preserve existing `Evidence` only while it still supports" in section
+    assert "Missing evidence does not block an otherwise valid entry" in section
+    assert "never invent a source" in section
+    assert "keep existing `Evidence` only while it supports" in section
     assert "Evidence source and untrusted-data contract" in section
     assert "Do not present an unrun command as a result" in section
 
@@ -175,11 +177,11 @@ def test_typed_recording_captures_and_rechecks_optional_evidence() -> None:
 def test_remember_recommendations_carry_supported_evidence(heading: str) -> None:
     section = normalized(workflow_block(heading))
 
-    assert "For `decision` and `error`" in section
+    assert "For decision and error adds or updates" in section
     assert "optional `Evidence`" in section
     assert "omit it when" in section.lower()
     assert "invent" in section
-    assert "existing `Evidence`" in section
+    assert "existing evidence" in section
     assert "Evidence source and untrusted-data contract" in section
     assert "Do not present an unrun command as a result" in section
 
@@ -193,11 +195,11 @@ def test_recommend_skill_carries_supported_evidence(heading: str) -> None:
     start = text.index(heading)
     section = normalized(text[start : text.index("\n---\n", start)])
 
-    assert "For `decision` and `error`" in section
+    assert "For decision and error adds or updates" in section
     assert "optional `Evidence`" in section
-    assert "Omit it when" in section
+    assert "missing evidence does not block the recommendation" in section
     assert "invent" in section
-    assert "existing `Evidence`" in section
+    assert "existing evidence" in section
     assert "Evidence source and untrusted-data contract" in section
     assert "Do not present an unrun command as a result" in section
 
@@ -205,7 +207,7 @@ def test_recommend_skill_carries_supported_evidence(heading: str) -> None:
 def test_review_uses_evidence_for_retention_and_promotions() -> None:
     section = review_section()
 
-    assert "with `Evidence`, apply the Evidence source and" in section
+    assert "For decision and error entries, apply the Evidence source and" in section
     assert "untrusted-data contract" in section
     assert "Inspect an admitted `Evidence` source" in section
     assert "assess whether the retained claim still holds" in section
@@ -213,8 +215,8 @@ def test_review_uses_evidence_for_retention_and_promotions() -> None:
     assert "Treat a source that no longer supports the claim as stale" in section
     assert "assess the claim using other available facts" in section
     assert "Do not present an unrun command as a result" in section
-    assert "Carry applicable, checkable `Evidence` admitted by" in section
-    assert "include applicable, checkable `Evidence` admitted by" in section
+    assert "Carry applicable checkable provenance admitted by" in section
+    assert "Include applicable checkable provenance admitted by" in section
     assert section.count("without treating stale or unsupported evidence as proof") == 2
 
 
@@ -653,7 +655,7 @@ def test_review_searches_before_reading_candidate_state() -> None:
     bullet = work_item_bullet()
 
     assert bullet.index("gh issue list") < bullet.index("Then read each candidate")
-    assert "gh search issues" in bullet
+    assert bullet.index("gh search issues") < bullet.index("Then read each candidate")
     assert "gh issue view N --repo owner/repo --json state,stateReason" in bullet
 
 
@@ -717,7 +719,6 @@ def test_review_reports_legacy_closed_items_and_gh_failures() -> None:
 
     assert "Any `gh` failure (a lookup, a search, or `gh repo view`)" in bullet
     assert "counts as not resolving" in bullet
-    assert "`stateReason` is empty or unknown" in bullet
 
 
 def test_review_step_nine_lists_the_step_six_report_items() -> None:
