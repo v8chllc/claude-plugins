@@ -82,26 +82,14 @@ def write_inputs(
     contract = sys.modules["review_contract"]
     outcome = contract.resolve_review_outcome(
         outcome_report,
-        score=module_score(outcome_report),
-        status=module_status(outcome_report),
+        score=91,
+        status="passing",
         reviewed_sha="1a2b3c4",
     )
     outcome_file.write_text(
         json.dumps(contract.serialize_outcome(outcome)), encoding="utf-8"
     )
     return review_file, summary_file, outcome_file
-
-
-def module_score(report: str) -> int:
-    match = sys.modules["review_contract"].extract_quality_score(report)
-    assert match is not None
-    return int(match)
-
-
-def module_status(report: str) -> str:
-    heading = report.split("### Quality Score: ", 1)[1].splitlines()[0]
-    label = heading.split(" — ", 1)[1]
-    return {"Fully Clean": "clean", "Passing": "passing", "Failing": "failing"}[label]
 
 
 def base_args(
@@ -219,12 +207,10 @@ def test_report_must_not_nest_a_details_block() -> None:
         module.validate_report(report)
 
 
-def test_score_comes_only_from_the_report_heading() -> None:
-    """No override exists: published metadata cannot contradict the report."""
+def test_posting_accepts_only_the_resolved_outcome_source() -> None:
     module = load_post_review_comment()
-    assert module.resolve_score(REPORT) == 91
-    with pytest.raises(module.ContractError):
-        module.resolve_score("### Evidence\n")
+    assert not hasattr(module, "resolve_score")
+    assert not hasattr(module, "extract_quality_score")
     help_text = module.build_parser().format_help()
     assert "--score" not in help_text
     assert "--status" not in help_text

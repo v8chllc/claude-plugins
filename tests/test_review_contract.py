@@ -118,12 +118,6 @@ def test_status_labels() -> None:
         contract.status_label("unknown")
 
 
-def test_extract_quality_score_reads_the_report_heading() -> None:
-    report = "intro\n\n### Quality Score: 73/100 — Failing\n\nrest\n"
-    assert contract.extract_quality_score(report) == 73
-    assert contract.extract_quality_score("no heading here") is None
-
-
 def test_valid_metadata_fixture_passes_validation() -> None:
     assert contract.validate_metadata(dict(METADATA["valid"]))
 
@@ -487,6 +481,111 @@ def test_resolve_and_signal_command_boundaries_preserve_the_reviewed_sha(
     signal = json.loads(signal_file.read_text(encoding="utf-8"))
     assert outcome["reviewed_sha"] == "abc1234"
     assert signal["details"]["reviewed_sha"] == outcome["reviewed_sha"]
+
+
+def test_resolve_command_rejects_an_invalid_report_without_an_artifact(
+    tmp_path: Path,
+) -> None:
+    report_file = tmp_path / "invalid-report.md"
+    output_file = tmp_path / "outcome.json"
+    report_file.write_text("### Evidence\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS_DIR / "review_contract.py"),
+            "resolve",
+            "--report-file",
+            str(report_file),
+            "--score",
+            "95",
+            "--status",
+            "passing",
+            "--reviewed-sha",
+            "abc1234",
+            "--output",
+            str(output_file),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "needs an exact '### Quality Score" in result.stderr
+    assert not output_file.exists()
+
+
+@pytest.mark.parametrize(
+    "outcome_text", [None, "{not json\n"], ids=["missing", "malformed"]
+)
+def test_signal_command_rejects_an_unreadable_outcome_without_an_artifact(
+    tmp_path: Path, outcome_text: str | None
+) -> None:
+    outcome_file = tmp_path / "outcome.json"
+    output_file = tmp_path / "signal.json"
+    if outcome_text is not None:
+        outcome_file.write_text(outcome_text, encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS_DIR / "review_contract.py"),
+            "signal",
+            "--outcome-file",
+            str(outcome_file),
+            "--cycle",
+            "3",
+            "--review-url",
+            "https://example.test/review/3",
+            "--output",
+            str(output_file),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Error: Failed to read resolved outcome" in result.stderr
+    assert not output_file.exists()
+
+
+def test_resolve_command_rejects_an_unwritable_output(tmp_path: Path) -> None:
+    report_file = tmp_path / "report.md"
+    output_directory = tmp_path / "outcome.json"
+    report_file.write_text(
+        """### Quality Score: 95/100 — Passing
+
+### Should Fix
+
+#### [F-1] [MEDIUM] One finding
+""",
+        encoding="utf-8",
+    )
+    output_directory.mkdir()
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS_DIR / "review_contract.py"),
+            "resolve",
+            "--report-file",
+            str(report_file),
+            "--score",
+            "95",
+            "--status",
+            "passing",
+            "--reviewed-sha",
+            "abc1234",
+            "--output",
+            str(output_directory),
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Error:" in result.stderr
+    assert output_directory.is_dir()
 
 
 def test_signal_command_has_no_independent_reviewed_sha_input() -> None:

@@ -29,7 +29,6 @@ from review_contract import (
     ContractError,
     ReviewOutcome,
     build_metadata,
-    extract_quality_score,
     read_outcome,
     render_metadata_block,
     resolve_review_outcome,
@@ -120,21 +119,6 @@ def validate_report(report_text: str) -> None:
             "the report in one <details> element, and recovery cuts at the first "
             "closing tag, so either one truncates the recovered report."
         )
-
-
-def resolve_score(report_text: str) -> int:
-    """Return the raw score from the report's Quality Score heading.
-
-    The heading is the only source. An override flag would let a caller publish
-    metadata that contradicts the visible report, and the synthesizer alone
-    decides the score.
-    """
-    extracted = extract_quality_score(report_text)
-    if extracted is None:
-        raise ContractError(
-            "No raw score found. The report needs a '### Quality Score: N/100' heading."
-        )
-    return extracted
 
 
 def template_path() -> Path:

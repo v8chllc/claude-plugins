@@ -95,7 +95,6 @@ COUNT_KEYS: tuple[str, ...] = ("files_touched", "findings_opened", "findings_clo
 _WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 
 SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
-QUALITY_SCORE_RE = re.compile(r"^### Quality Score:\s*(\d+)/100\b", re.MULTILINE)
 QUALITY_HEADING_RE = re.compile(
     r"^### Quality Score:\s*(\d+)/100 — (Fully Clean|Passing|Failing)$",
     re.MULTILINE,
@@ -201,12 +200,6 @@ def status_label(status: str) -> str:
         return STATUS_LABELS[status]
     except KeyError:
         raise ContractError(f"Unknown status '{status}'.") from None
-
-
-def extract_quality_score(report_text: str) -> int | None:
-    """Return the raw score from a synthesized report heading, if present."""
-    match = QUALITY_SCORE_RE.search(report_text)
-    return int(match.group(1)) if match else None
 
 
 def open_findings(report_text: str) -> list[dict[str, str]]:
