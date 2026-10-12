@@ -28,7 +28,7 @@ from typing import Any
 SCHEMA_VERSION = 2
 COMMENT_MARKER = "consensus-review"
 COMMENT_TYPE = "review"
-OUTCOME_SCHEMA_VERSION = 1
+OUTCOME_SCHEMA_VERSION = 2
 OUTCOME_KEYS = frozenset(
     {
         "schema_version",
@@ -36,8 +36,7 @@ OUTCOME_KEYS = frozenset(
         "status",
         "reviewed_sha",
         "findings",
-        "advisory",
-        "summary",
+        "completion_kind",
     }
 )
 
@@ -71,6 +70,15 @@ STATUS_LABELS: dict[str, str] = {
     STATUS_PASSING: "Passing",
     STATUS_FAILING: "Failing",
 }
+
+COMPLETION_CLEAN = "clean"
+COMPLETION_ADVISORY = "advisory"
+COMPLETION_FIX_REQUIRED = "fix-required"
+COMPLETION_KINDS: tuple[str, ...] = (
+    COMPLETION_CLEAN,
+    COMPLETION_ADVISORY,
+    COMPLETION_FIX_REQUIRED,
+)
 
 DELEGATION_MODES: tuple[str, ...] = ("parallel-subagents", "sequential-fallback")
 
@@ -170,8 +178,7 @@ class ReviewOutcome:
     status: str
     reviewed_sha: str
     findings: tuple[dict[str, str], ...]
-    advisory: bool
-    summary: str
+    completion_kind: str
 
 
 def deduction(finding: Finding) -> int:
@@ -321,7 +328,7 @@ def validate_score_breakdown(
 
     if (
         len(rows) < 3
-        or not re.fullmatch(r"\|\s*Finding\s*\|\s*Deduction\s*\|", rows[0])
+        or not re.fullmatch(r"\|\s*Finding(?:\s+ID)?\s*\|\s*Deduction\s*\|", rows[0])
         or not re.fullmatch(r"\|\s*:?-{3,}:?\s*\|\s*:?-{3,}:?\s*\|", rows[1])
     ):
         raise ContractError("The report Score Breakdown has an invalid table header.")
@@ -398,23 +405,13 @@ def advisory_completion(
     return MUST_FIX not in sections and SHOULD_FIX in sections
 
 
-def outcome_summary(score: int, status: str, advisory: bool) -> str:
-    """Return the canonical first summary bullet for a resolved outcome."""
+def completion_kind(score: int, status: str, findings: Iterable[dict[str, str]]) -> str:
+    """Return the semantic routing kind for a resolved outcome."""
     if status == STATUS_CLEAN:
-        return f"- Review passed with a score of {score}/100. No fixes are required."
-    if advisory:
-        return (
-            f"- Review passed with a score of {score}/100. "
-            "The caller will disposition the open findings."
-        )
-    if status == STATUS_PASSING:
-        return (
-            f"- Review passed with a score of {score}/100. "
-            "A fix cycle will address the open findings."
-        )
-    return (
-        f"- Review failed with a score of {score}/100. Fixes are required before merge."
-    )
+        return COMPLETION_CLEAN
+    if advisory_completion(score, status, findings):
+        return COMPLETION_ADVISORY
+    return COMPLETION_FIX_REQUIRED
 
 
 def resolve_review_outcome(
@@ -469,9 +466,8 @@ def resolve_review_outcome(
     validate_score_breakdown(
         top_level_lines, scored_findings, score, count_plan_notes(top_level_lines)
     )
-    advisory = advisory_completion(score, status, findings)
-    summary = outcome_summary(score, status, advisory)
-    return ReviewOutcome(score, status, reviewed_sha, findings, advisory, summary)
+    kind = completion_kind(score, status, findings)
+    return ReviewOutcome(score, status, reviewed_sha, findings, kind)
 
 
 def serialize_outcome(outcome: ReviewOutcome) -> dict[str, Any]:
@@ -482,8 +478,7 @@ def serialize_outcome(outcome: ReviewOutcome) -> dict[str, Any]:
         "status": outcome.status,
         "reviewed_sha": outcome.reviewed_sha,
         "findings": list(outcome.findings),
-        "advisory": outcome.advisory,
-        "summary": outcome.summary,
+        "completion_kind": outcome.completion_kind,
     }
 
 
@@ -545,17 +540,14 @@ def deserialize_outcome(payload: object) -> ReviewOutcome:
         raise ContractError("Resolved outcome score contradicts its findings.")
     if review_status(score, scored_findings) != status:
         raise ContractError("Resolved outcome status contradicts its findings.")
-    advisory = advisory_completion(score, status, findings)
-    if payload["advisory"] is not advisory:
-        raise ContractError("Resolved outcome advisory flag contradicts its findings.")
-    if not isinstance(payload["summary"], str):
-        raise ContractError("Resolved outcome summary must be a string.")
-    outcome = ReviewOutcome(
-        score, status, reviewed_sha, tuple(findings), advisory, payload["summary"]
-    )
-    if outcome_summary(score, status, advisory) != payload["summary"]:
-        raise ContractError("Resolved outcome summary is invalid.")
-    return outcome
+    kind = payload["completion_kind"]
+    if not isinstance(kind, str) or kind not in COMPLETION_KINDS:
+        raise ContractError("Resolved outcome has an invalid completion kind.")
+    if completion_kind(score, status, findings) != kind:
+        raise ContractError(
+            "Resolved outcome completion kind contradicts its findings."
+        )
+    return ReviewOutcome(score, status, reviewed_sha, tuple(findings), kind)
 
 
 def read_outcome(path: str | Path) -> ReviewOutcome:
@@ -613,7 +605,7 @@ def completion_signal(
                 "review_url": review_url,
             },
         }
-    if outcome.advisory:
+    if outcome.completion_kind == COMPLETION_ADVISORY:
         return {
             "signal": "REVIEW_COMPLETE_WITH_FINDINGS",
             "cycle": cycle,

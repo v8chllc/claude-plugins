@@ -41,27 +41,19 @@ posting and report that the report is incomplete. Post nothing in that case.
 ## Step 2 — Write the summary
 
 Write one to three markdown bullets to `{scratch-dir}/summary-{cycle:02d}.md`.
-The first bullet states the outcome; the rest name the most consequential
-findings. Each bullet is one sentence under 120 characters, with no heading, no
-code block, and no long quote.
+Draw them from the report's Summary and Evidence sections, naming the most
+consequential finding and the evidence for it. Each bullet is one sentence
+under 120 characters, with no heading, code block, or long quote.
 
 Cite only repository-relative paths of tracked files, or links. Never an
 absolute path, a home-directory path, or an untracked scratch path — the people
 reading this comment have no checkout of your machine.
 
-Read the outcome artifact and use its `summary` as the first bullet verbatim.
-The posting script derives the same outcome from the report and rejects a
-different first bullet. Its possible values are:
-
-- `clean` — `- Review passed with a score of N/100. No fixes are required.`
-- `passing` at 95 or above, with no open Must Fix and open Should Fix findings —
-  `- Review passed with a score of N/100. The caller will disposition the open findings.`
-- other `passing` — `- Review passed with a score of N/100. A fix cycle will address the open findings.`
-- `failing` — `- Review failed with a score of N/100. Fixes are required before merge.`
-
-For the 95+ advisory result, keep metadata status `passing`. The summary must
-not promise an automatic fix cycle or say that no fixes are required. Report
-the posted comment URL so the skill can return the exact review record.
+Do not state or translate the resolved status, `completion_kind`, fix
+requirement, or follow-up disposition. The posting script renders the sole
+completion disposition deterministically. For a 95+ advisory result, the
+metadata status remains `passing`. Report the posted comment URL so the skill
+can return the exact review record.
 
 ## Step 3 — Write the report file and post
 
@@ -85,7 +77,7 @@ uv run <skill-dir>/scripts/post_review_comment.py \
 
 Substitute the absolute skill directory the orchestrator gave you. The script
 validates the report against the resolved artifact and takes the score, status,
-reviewed SHA, summary rule, and findings from that artifact. It embeds the
+reviewed SHA, completion kind, and findings from that artifact. It embeds the
 hidden `schema_version: 2` metadata that later cycles recover, and posts through
 `gh` or `glab`.
 

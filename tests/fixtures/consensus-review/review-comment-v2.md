@@ -9,6 +9,8 @@
 
 ### Summary
 
+**Resolved completion:** Fixes required before review completion.
+
 - Review passed with a score of 85/100. A fix cycle will address the open findings.
 
 <details>

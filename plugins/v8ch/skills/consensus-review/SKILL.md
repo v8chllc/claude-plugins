@@ -170,7 +170,9 @@ prompt. Agents do not receive skill variables.
 
    A nonzero exit makes the synthesis incomplete: do not post it. Preserve the
    outcome artifact unchanged for the poster and terminal-signal command. It is
-   the only source for the summary, status branch, reviewed SHA, and findings.
+   the only source for the completion state, status branch, reviewed SHA, and
+   findings. The poster writes finding and evidence bullets; the posting script
+   renders the completion state above them.
 
 8. **Return or post.**
    - **No PR/MR number:** return the report as-is, emit `REVIEW_COMPLETE` with

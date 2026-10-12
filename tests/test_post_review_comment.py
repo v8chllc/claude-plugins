@@ -49,10 +49,7 @@ None.
 | **Final score** | **90/100** |
 """
 
-SUMMARY = (
-    "- Review passed with a score of 90/100. "
-    "A fix cycle will address the open findings.\n"
-)
+SUMMARY = "- The HIGH finding leaves an empty table body in src/render.py.\n"
 
 REQUIRED_ARGS = [
     "--delegation-mode",
@@ -200,13 +197,11 @@ def test_summary_rejects_the_wrong_shape(summary: str) -> None:
         module.validate_summary(summary)
 
 
-def test_summary_first_bullet_must_match_the_resolved_outcome() -> None:
+def test_summary_validation_preserves_poster_wording() -> None:
     module = load_post_review_comment()
-    expected = "- Review passed with a score of 95/100. Expected outcome."
-    with pytest.raises(module.ContractError, match="contradicts"):
-        module.validate_summary(
-            "- A different outcome.\n", expected_first_bullet=expected
-        )
+    assert module.validate_summary("- Agent-authored finding summary.\n") == (
+        "- Agent-authored finding summary."
+    )
 
 
 def test_report_must_carry_merged_evidence() -> None:
@@ -293,7 +288,7 @@ None.
     )
     body = module.build_comment_body(
         report_text=report,
-        summary_text=outcome.summary,
+        summary_text="- [F-1] Preserve the payload remains open at MEDIUM severity.",
         cycle=6,
         outcome=outcome,
         delegation_mode="parallel-subagents",
@@ -309,7 +304,11 @@ None.
         review_url="https://example.test/review/6",
         post_succeeded=True,
     )
-    assert outcome.summary in body
+    assert (
+        "**Resolved completion:** Complete with advisory findings for caller "
+        "disposition." in body
+    )
+    assert "[F-1] Preserve the payload remains open at MEDIUM severity." in body
     assert "#### [F-1] [MEDIUM] Preserve the payload" in body
     assert signal is not None
     assert signal["details"]["open_findings"] == list(outcome.findings)
@@ -384,10 +383,16 @@ def test_comment_body_renders_the_template_without_placeholders() -> None:
 
 
 @pytest.mark.parametrize(
-    ("status", "icon", "score"),
-    [("clean", "✅", 100), ("passing", "\U0001f7e1", 90), ("failing", "❌", 80)],
+    ("status", "icon", "score", "completion_notice"),
+    [
+        ("clean", "✅", 100, "Complete; no open findings."),
+        ("passing", "\U0001f7e1", 90, "Fixes required before review completion."),
+        ("failing", "❌", 80, "Fixes required before review completion."),
+    ],
 )
-def test_status_icons(status: str, icon: str, score: int) -> None:
+def test_status_icons(
+    status: str, icon: str, score: int, completion_notice: str
+) -> None:
     """Each status renders its icon; the score must sit in that status's band."""
     module = load_post_review_comment()
     report = REPORT.replace(
@@ -418,7 +423,7 @@ def test_status_icons(status: str, icon: str, score: int) -> None:
     )
     body = module.build_comment_body(
         report_text=report,
-        summary_text=outcome.summary,
+        summary_text="- Findings and supporting evidence are included below.",
         cycle=1,
         outcome=outcome,
         delegation_mode="parallel-subagents",
@@ -429,6 +434,7 @@ def test_status_icons(status: str, icon: str, score: int) -> None:
         findings_closed=0,
     )
     assert f"### {icon} Consensus Review" in body
+    assert f"**Resolved completion:** {completion_notice}" in body
 
 
 def test_main_posts_to_github_by_default(
