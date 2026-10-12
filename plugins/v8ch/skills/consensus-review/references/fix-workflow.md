@@ -25,9 +25,6 @@ The fixer gives every current finding exactly one disposition — `fixed`,
 runs the repository's documented quality commands plus repair-appropriate proof,
 and writes one fix log holding everything the commit body needs.
 
-Read `references/repair-proof.md` in full. It is the normative classification
-and acceptance contract for the fixer and this workflow.
-
 The raw score is the only threshold input. There are no fix modes, no target
 thresholds, and no score-gap targeting.
 
@@ -40,11 +37,16 @@ The fixer returns a fix-log path and one terminal word. It never emits a signal:
 this workflow returns an outcome, and the orchestrator emits the run's single
 terminal signal.
 
-- **`COMPLETE`** — every current finding carries a disposition, the fixer's
-  proof duties are complete, and the quality commands passed. Continue to the
-  independent text repair verification below.
-- **`MUTATION_UNPROVEN`** — fixer-owned proof could not be confirmed. Preserve
-  the affected finding IDs and continue to Step 5 without committing.
+- **`COMPLETE`** — every current finding carries a disposition, every applied
+  text-only repair has author verification, every applied code or configuration
+  repair has a confirmed mutation check, and the quality commands passed.
+  Continue to Step 3, including when the only applied repairs are
+  author-verified text-only repairs.
+- **`MUTATION_UNPROVEN`** — an applied code or configuration repair (`fixed`, or
+  `partial` where that content changed) has a mutation check the fixer could not
+  confirm. Commit nothing and return `BLOCKERS_REMAIN` naming those findings.
+  A text-only repair never causes this outcome. A `declined` or
+  `work-item-required` finding applies no repair and needs no proof.
 - **`QUALITY_FAILURES`** — the repository's quality commands still fail and the
   fixer could not resolve them. Commit nothing and return `QUALITY_FAILURES` with
   the failing commands.
@@ -57,14 +59,6 @@ terminal signal.
 - **No files changed** — `git status --porcelain` is empty. Nothing is committed
   or pushed, so `PUSH_COMPLETE`, which reports pushed commits, never applies.
   Return `NO_CHANGE` with an empty SHA list and let Step 5 route it.
-
-For `COMPLETE`, invoke `v8ch:repair-proof-reviewer` with the synthesized report,
-the fix log, the repository-relative fixer diff, the expected text-only finding
-IDs derived from the fixer's result, the repository directory, and the absolute
-skill directory. The role reads the shared contract and returns an independent
-verification record. Validate the complete record against the contract and
-append it to the fix log. Any invalid or `PROOF_UNPROVEN` result preserves the
-affected finding IDs and continues to Step 5 without committing.
 
 ## Step 3 — Commit
 
@@ -80,8 +74,8 @@ The commit body records:
 - every finding's disposition;
 - the quality commands and their results;
 - one mutation check per code or configuration repair;
-- the independent text repair verification records, with finding IDs and
-  inspected corrections;
+- the separate author-verification section for every text-only repair, with
+  finding IDs and inspected corrections;
 - the work-item records the fixer wrote under `## Work Items Required`.
 
 ## Step 4 — Push
@@ -117,12 +111,14 @@ identical runs cannot end on different signals:
 1. Caller-declared single-cycle cap on a PR/MR — emit
    `CAPPED_REVIEW_COMPLETE` with this review's URL, score, status, any pushed
    fix commit SHAs, work items, `fixer_outcome`, `failed_commands`, and
-   `unproven_findings`. Do not start another review. This signal does not claim
-   that a fix commit has been reviewed or that findings closed. A failed proof
-   or quality pass has an empty SHA list and carries its details here.
-2. The fix log leaves a current finding with no disposition, the fixer returned
-   `MUTATION_UNPROVEN`, or independent verification returned `PROOF_UNPROVEN` —
-   `BLOCKERS_REMAIN`, naming those findings, whatever the budget allows.
+   `unproven_findings`. Include findings with no disposition or unconfirmed
+   mutation proof in `unproven_findings`; include failing quality commands in
+   `failed_commands`. On either failure, commit nothing and report an empty SHA
+   list. Do not start another review. This signal does not claim that a fix
+   commit has been reviewed or that findings closed.
+2. The fix log leaves a current finding with no disposition, or the fixer
+   returned `MUTATION_UNPROVEN` — `BLOCKERS_REMAIN`, naming those findings,
+   whatever the budget allows.
 3. Outcome `QUALITY_FAILURES` — `QUALITY_FAILURES` with the failing commands.
 4. Budget remaining — start the next review cycle rather than ending the run.
 5. Budget exhausted, findings remain `partial` or `work-item-required` —
