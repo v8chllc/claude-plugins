@@ -124,6 +124,15 @@ def test_error_example_cites_failed_and_passing_run_results() -> None:
     )
 
 
+def test_decision_example_keeps_claude_repository_file_evidence() -> None:
+    text = TYPES_PATH.read_text(encoding="utf-8")
+    decision = text.split("## decision\n", 1)[1].split("\n---\n", 1)[0]
+
+    assert "Evidence: docs/architecture.md (database choice and local setup)" in (
+        decision
+    )
+
+
 def test_evidence_sources_stay_inside_the_repository_trust_boundary() -> None:
     text = normalized(TYPES_PATH.read_text(encoding="utf-8"))
 
@@ -216,6 +225,7 @@ def test_review_uses_evidence_for_retention_and_promotions() -> None:
     assert "assess the claim using other available facts" in section
     assert "Do not present an unrun command as a result" in section
     assert "Carry applicable checkable provenance admitted by" in section
+    assert "into the proposed patch when useful" in section
     assert "Include applicable checkable provenance admitted by" in section
     assert section.count("without treating stale or unsupported evidence as proof") == 2
 
