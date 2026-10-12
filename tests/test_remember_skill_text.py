@@ -644,8 +644,8 @@ def test_review_allows_reading_how_a_work_item_closed() -> None:
     assert "add `--json state,stateReason` to read how it closed" in section
     assert "a closed item whose `stateReason` is empty or unknown" in section
     assert (
-        "Then read each candidate with `gh issue view N --repo owner/repo --json state,stateReason`"
-        in (section)
+        "Then read each candidate with `gh issue view N --repo owner/repo "
+        "--json state,stateReason`" in (section)
     )
 
 
