@@ -34,16 +34,20 @@ proof.
 
 ## Independent verification procedure
 
-Before invoking the reviewer, derive the expected text-only finding IDs from
-the fixer's dispositions and repository-relative diff. Include every `fixed`
-finding whose applied repair has a text-only part and every `partial` finding
-where a text-only part changed. Pass that expected set to the reviewer with the
-other inputs.
+Before invoking the reviewer, the workflow derives the expected text-only
+finding IDs from the fixer's dispositions and repository-relative diff. Include
+every `fixed` finding whose applied repair has a text-only part and every
+`partial` finding where a text-only part changed. Pass that expected set to the
+reviewer with the other inputs.
 
-The reviewer reads the synthesized finding, the fix log, and the final changed
-text for each expected ID. It compares the repair with the finding's intended
-correction without raising new findings or judging code and configuration
-parts. Its complete result uses this schema:
+The reviewer independently derives the actual text-only repair IDs from the
+synthesized report, fix log, and repository-relative diff. It must not use the
+workflow's expected set as the source of that inventory. It compares the actual
+set with the expected set and fails verification on any missing or unexpected
+ID. For every ID in the union of those sets, it reads the synthesized finding,
+the fix log, and the final changed text, then compares the repair with the
+finding's intended correction without raising new findings or judging code and
+configuration parts. Its complete result uses this schema:
 
 ```markdown
 ## Independent Text Repair Verification
@@ -52,10 +56,11 @@ parts. Its complete result uses this schema:
 ```
 
 There must be exactly one record for every expected ID and no records for other
-IDs. When the expected set is empty, use `None.` instead of a finding record.
-End with `VERIFIED` only when every expected repair is present and accepted;
-otherwise end with `PROOF_UNPROVEN` followed by the rejected or missing finding
-IDs.
+IDs in a verified result. When both sets are empty, use `None.` instead of a
+finding record. End with `VERIFIED` only when the independently derived actual
+set equals the expected set and every repair is present and accepted. Otherwise
+end with `PROOF_UNPROVEN` followed by every rejected, missing, or unexpected
+finding ID.
 
 ## Acceptance
 
@@ -63,9 +68,10 @@ A repair is proven only when every code or configuration part has a confirmed
 mutation check and every text-only part has an independent `accepted` record.
 The fix workflow must validate the entire independent result before committing;
 the terminal marker alone is insufficient. It accepts the result only when the
-heading occurs once, every record matches the schema, every expected ID occurs
-exactly once as `accepted`, no unexpected ID occurs, `None.` is used only for an
-empty expected set, and the last nonblank line is `VERIFIED`.
+heading occurs once, the reviewer states that its independently derived actual
+set equals the expected set, every record matches the schema, every expected ID
+occurs exactly once as `accepted`, no unexpected ID occurs, `None.` is used only
+when both sets are empty, and the last nonblank line is `VERIFIED`.
 
 A missing, malformed, duplicate, rejected, unexpected, or incomplete record,
 or a missing or incorrect terminal marker, is `PROOF_UNPROVEN`. Name every

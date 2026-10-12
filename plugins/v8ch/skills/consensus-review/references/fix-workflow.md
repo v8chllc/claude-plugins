@@ -59,13 +59,12 @@ terminal signal.
   Return `NO_CHANGE` with an empty SHA list and let Step 5 route it.
 
 For `COMPLETE`, invoke `v8ch:repair-proof-reviewer` with the synthesized report,
-the fix log, the repository-relative fixer diff, the repository directory, and
-the expected text-only finding IDs derived from the fixer's result, the
-repository directory, and the absolute skill directory. The role reads the
-shared contract and returns an independent verification record. Validate the
-complete record against the contract and append it to the fix log. Any invalid
-or `PROOF_UNPROVEN` result preserves the affected finding IDs and continues to
-Step 5 without committing.
+the fix log, the repository-relative fixer diff, the expected text-only finding
+IDs derived from the fixer's result, the repository directory, and the absolute
+skill directory. The role reads the shared contract and returns an independent
+verification record. Validate the complete record against the contract and
+append it to the fix log. Any invalid or `PROOF_UNPROVEN` result preserves the
+affected finding IDs and continues to Step 5 without committing.
 
 ## Step 3 — Commit
 

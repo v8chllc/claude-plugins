@@ -23,6 +23,11 @@ contract; do not replace it with your own criteria.
 - The expected text-only finding IDs derived by the fix workflow.
 - The repository directory and absolute consensus-review skill directory.
 
+Independently derive the actual text-only repair IDs from the synthesized
+report, fix log, and repository-relative diff before consulting the expected
+set. Compare the two sets and fail verification on any mismatch as required by
+the shared contract.
+
 ## Output
 
 Write no file. Return only the verification record and terminal marker required
