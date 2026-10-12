@@ -926,6 +926,100 @@ None.
         )
 
 
+@pytest.mark.parametrize(
+    ("notes", "plan_rows", "valid"),
+    [
+        ("None.", "", True),
+        ("#### Note A", "| Plan notes (1) | 0 |\n", True),
+        ("#### Note A\n\n#### Note B", "| Plan notes (2) | 0 |\n", True),
+        ("None.", "| Plan notes (999) | 0 |\n", False),
+        ("None.", "| Plan notes (0) | 0 |\n", False),
+        ("#### Note A", "", False),
+        ("#### Note A", "| Plan notes (2) | 0 |\n", False),
+        ("#### Note A", "| Plan notes (1) | 0 |\n| Plan notes (1) | 0 |\n", False),
+    ],
+)
+def test_plan_note_rows_match_report_entries(
+    notes: str, plan_rows: str, valid: bool
+) -> None:
+    report = f"""### Quality Score: 95/100 — Passing
+
+### Evidence
+
+### Must Fix
+
+None.
+
+### Should Fix
+
+#### [F-1] [MEDIUM] Current finding
+
+### Latent Findings
+
+None.
+
+### Plan Notes
+
+{notes}
+
+### Score Breakdown
+
+| Finding | Deduction |
+| --- | --- |
+| F-1 | -5 |
+{plan_rows}| **Final score** | **95/100** |
+"""
+    if valid:
+        contract.resolve_review_outcome(
+            report, score=95, status="passing", reviewed_sha="abc1234"
+        )
+    else:
+        with pytest.raises(contract.ContractError, match="plan-note count"):
+            contract.resolve_review_outcome(
+                report, score=95, status="passing", reviewed_sha="abc1234"
+            )
+
+
+@pytest.mark.parametrize(
+    "trailing_row",
+    ["| F-1 | -5 |", "| Plan notes (1) | 0 |"],
+)
+def test_score_breakdown_final_row_must_be_last(trailing_row: str) -> None:
+    report = f"""### Quality Score: 95/100 — Passing
+
+### Evidence
+
+### Must Fix
+
+None.
+
+### Should Fix
+
+#### [F-1] [MEDIUM] Current finding
+
+### Latent Findings
+
+None.
+
+### Plan Notes
+
+#### Note A
+
+### Score Breakdown
+
+| Finding | Deduction |
+| --- | --- |
+| F-1 | -5 |
+| Plan notes (1) | 0 |
+| **Final score** | **95/100** |
+{trailing_row}
+"""
+    with pytest.raises(contract.ContractError, match="must end with the final score"):
+        contract.resolve_review_outcome(
+            report, score=95, status="passing", reviewed_sha="abc1234"
+        )
+
+
 def test_deserialization_uses_the_authoritative_status_policy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

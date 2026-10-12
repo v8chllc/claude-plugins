@@ -298,7 +298,10 @@ def open_findings(report_text: str) -> list[dict[str, str]]:
 
 
 def validate_score_breakdown(
-    top_level_lines: list[str], findings: Iterable[Finding], score: int
+    top_level_lines: list[str],
+    findings: Iterable[Finding],
+    score: int,
+    plan_note_count: int,
 ) -> None:
     """Validate the durable score table against the governed findings."""
     heading_indexes = [
@@ -322,10 +325,13 @@ def validate_score_breakdown(
         or not re.fullmatch(r"\|\s*:?-{3,}:?\s*\|\s*:?-{3,}:?\s*\|", rows[1])
     ):
         raise ContractError("The report Score Breakdown has an invalid table header.")
+    if not SCORE_BREAKDOWN_FINAL_RE.fullmatch(rows[-1]):
+        raise ContractError("The report Score Breakdown must end with the final score.")
 
     expected = list(findings)
     actual: list[tuple[str, str | None, int]] = []
     final_scores: list[int] = []
+    plan_note_rows: list[int] = []
     for breakdown_row in rows[2:]:
         finding_match = SCORE_BREAKDOWN_FINDING_RE.fullmatch(breakdown_row)
         if finding_match:
@@ -336,12 +342,20 @@ def validate_score_breakdown(
         if final_match:
             final_scores.append(int(final_match.group(1)))
             continue
-        if re.fullmatch(r"\|\s*Plan notes \(\d+\)\s*\|\s*0\s*\|", breakdown_row):
+        plan_note_match = re.fullmatch(
+            r"\|\s*Plan notes \((\d+)\)\s*\|\s*0\s*\|", breakdown_row
+        )
+        if plan_note_match:
+            plan_note_rows.append(int(plan_note_match.group(1)))
             continue
         raise ContractError(f"Invalid Score Breakdown row: {breakdown_row!r}.")
 
     if len(final_scores) != 1 or final_scores[0] != score:
         raise ContractError("The report Score Breakdown final score is inconsistent.")
+    if plan_note_rows != ([plan_note_count] if plan_note_count else []):
+        raise ContractError(
+            "The report Score Breakdown plan-note count is inconsistent."
+        )
     if len(actual) != len(expected):
         raise ContractError("The report Score Breakdown findings are inconsistent.")
     for actual_row, finding in zip(actual, expected, strict=True):
@@ -354,6 +368,24 @@ def validate_score_breakdown(
             raise ContractError(
                 "The report Score Breakdown deductions are inconsistent."
             )
+
+
+def count_plan_notes(top_level_lines: list[str]) -> int:
+    """Count Plan Notes titles outside fenced blocks."""
+    headings = [
+        index for index, line in enumerate(top_level_lines) if line == "### Plan Notes"
+    ]
+    if len(headings) > 1:
+        raise ContractError("The report contains duplicate Plan Notes sections.")
+    if not headings:
+        return 0
+    count = 0
+    for line in top_level_lines[headings[0] + 1 :]:
+        if line.startswith("### "):
+            break
+        if line.startswith("#### "):
+            count += 1
+    return count
 
 
 def advisory_completion(
@@ -434,7 +466,9 @@ def resolve_review_outcome(
             "The report score or status contradicts its finding deductions and "
             "open blockers."
         )
-    validate_score_breakdown(top_level_lines, scored_findings, score)
+    validate_score_breakdown(
+        top_level_lines, scored_findings, score, count_plan_notes(top_level_lines)
+    )
     advisory = advisory_completion(score, status, findings)
     summary = outcome_summary(score, status, advisory)
     return ReviewOutcome(score, status, reviewed_sha, findings, advisory, summary)
