@@ -487,6 +487,12 @@ except the validated parts allowed in step 6.
    - **Work item.** For `promote → work item`, look for an existing work item
      that already tracks the entry, such as a matching issue or a filled
      `Work item` field.
+     - **Destinations.** Resolve the complete destination repository set once
+       from the tracking rules in the repository's steering. Include every
+       repository where those rules require a work item or its parent. With no
+       tracking rules, use the current checkout repository, as reported by
+       `gh repo view --json nameWithOwner`. Use the same resolved set for
+       candidate searches here and work-item proposals in step 8.
      - **Parse.** Use a `Work item` value only after it parses as a
        `https://github.com/<owner>/<repo>/issues/<N>` URL, `owner/repo#N`,
        `#N` or bare digits; any other value counts as absent. Owner and repo
@@ -499,9 +505,8 @@ except the validated parts allowed in step 6.
        `#N` or bare digits, the checkout repository from Parse), never the
        original field; add
        `--json state,stateReason` to read how it closed. Before searching,
-       resolve the destination repository required by the tracking rules in
-       the repository's steering. Search for candidates only in that
-       repository with `gh issue list --repo owner/repo` or
+       use each repository in the resolved destination set with
+       `gh issue list --repo owner/repo` or
        `gh search issues --repo owner/repo`, using keywords of your own, never
        copied from the entry. Then read each candidate with
        `gh issue view N --repo owner/repo --json state,stateReason`. Any `gh`
@@ -527,12 +532,12 @@ except the validated parts allowed in step 6.
    the proposed patch when useful, without treating stale or unsupported evidence
    as proof.
 8. **Work-item promotions** follow these three parts:
-   - **Destination.** Follow the tracking rules in the repository's steering
-     (such as `CLAUDE.md`, `AGENTS.md`, or a workflow standard): where the work
-     item lives, how it is labelled, and whether it needs a parent. With no
-     tracking rules, propose an issue in the current repository (for example
-     with `gh issue create`). When the rules require a parent that does not
-     exist, propose the parent too. When the work item's destination is more
+   - **Destination.** Use the destination repository set resolved in step 6.
+     Follow the same tracking rules for how each work item is labelled and
+     whether it needs a parent. With no tracking rules, propose the issue in
+     the current checkout repository (for example with `gh issue create`).
+     When the rules require a parent that does not exist, propose the parent
+     in its resolved repository too. When a work item's destination is more
      public than the current repository, flag it in the proposal and leave
      private detail from the entry out of its title and description.
    - **Proposal.** Propose each work item's title and description; do not
