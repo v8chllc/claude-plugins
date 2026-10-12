@@ -55,9 +55,16 @@ def test_text_repairs_require_an_independent_read_only_reviewer() -> None:
 def test_independent_verification_fails_closed() -> None:
     contract = read(SKILL_DIR / "references/repair-proof.md")
     workflow = read(SKILL_DIR / "references/fix-workflow.md")
+    reviewer = read(AGENT_DIR / "repair-proof-reviewer.md")
 
-    assert "derive the expected text-only finding IDs" in contract
-    assert "every expected ID occurs\nexactly once as `accepted`" in contract
+    assert "derives the expected text-only\nfinding IDs" in contract
+    assert "independently derives the actual text-only repair IDs" in contract
+    assert "must not use the\nworkflow's expected set as the source" in contract
+    assert "actual\nset with the expected set" in contract
+    assert "fails verification on any missing or unexpected\nID" in contract
+    assert "Independently derive the actual text-only repair IDs" in reviewer
+    assert "fail verification on any mismatch" in reviewer
+    assert "every expected ID\noccurs exactly once as `accepted`" in contract
     assert "the terminal marker alone is insufficient" in contract
     for invalid_result in (
         "missing",
@@ -69,8 +76,18 @@ def test_independent_verification_fails_closed() -> None:
     ):
         assert invalid_result in contract
     assert "missing or incorrect terminal marker" in contract
-    assert "expected text-only finding IDs derived from the fixer's result" in workflow
-    assert "Validate the\ncomplete record against the contract" in workflow
+    assert "expected text-only finding\nIDs derived from the fixer's result" in workflow
+    assert "Validate the complete record against the contract" in workflow
+
+
+def test_repair_proof_reviewer_receives_repository_directory_once() -> None:
+    workflow = read(SKILL_DIR / "references/fix-workflow.md")
+    invocation = workflow.split(
+        "For `COMPLETE`, invoke `v8ch:repair-proof-reviewer` with", 1
+    )[1].split("The role reads", 1)[0]
+    invocation = " ".join(invocation.split())
+
+    assert invocation.count("the repository directory") == 1
 
 
 def test_capped_review_routes_before_fixer_failure_signals() -> None:
