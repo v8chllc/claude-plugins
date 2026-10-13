@@ -97,15 +97,25 @@ def read_required_text(path: str | Path, *, label: str) -> str:
 
 def validate_summary(summary_text: str) -> str:
     """Validate a one-to-three bullet synthesized summary."""
-    lines = [line.strip() for line in summary_text.splitlines() if line.strip()]
-    if not all(line.startswith("- ") for line in lines):
-        raise ContractError("Every summary line must be a markdown bullet ('- ').")
-    if not MIN_SUMMARY_BULLETS <= len(lines) <= MAX_SUMMARY_BULLETS:
+    summary = summary_text.strip()
+    lines = summary.splitlines()
+    bullet_count = 0
+    for line in lines:
+        if not line.strip():
+            continue
+        if line.startswith("- "):
+            bullet_count += 1
+        elif not line[:1].isspace():
+            raise ContractError(
+                "Every summary paragraph must be a markdown bullet ('- ') or an "
+                "indented continuation line."
+            )
+    if not MIN_SUMMARY_BULLETS <= bullet_count <= MAX_SUMMARY_BULLETS:
         raise ContractError(
             f"The summary must hold {MIN_SUMMARY_BULLETS} to {MAX_SUMMARY_BULLETS} "
-            f"bullets, got {len(lines)}."
+            f"bullets, got {bullet_count}."
         )
-    return "\n".join(lines)
+    return summary
 
 
 def extract_report_summary(report_text: str) -> str:

@@ -1,5 +1,6 @@
 """Exercise the posted advisory route through its three executable boundaries."""
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -167,27 +168,39 @@ def test_advisory_journey_posts_once_and_returns_full_signal_without_fixer(
     assert "Complete with advisory findings for caller disposition." in posted_body
     assert report.strip() in posted_body
 
-    fixer_calls: list[str] = []
-    signal = contract.dispatch_after_post(
-        outcome,
-        cycle=cycle,
-        review_url=REVIEW_URL,
-        post_succeeded=True,
-        invoke_fixer=lambda: fixer_calls.append("fix"),
+    dispatch_path = tmp_path / "dispatch.json"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS_DIR / "review_contract.py"),
+            "signal",
+            "--outcome-file",
+            str(outcome_path),
+            "--cycle",
+            str(cycle),
+            "--review-url",
+            REVIEW_URL,
+            "--output",
+            str(dispatch_path),
+        ],
+        check=True,
     )
-    assert signal == {
-        "signal": "REVIEW_COMPLETE_WITH_FINDINGS",
-        "cycle": cycle,
-        "details": {
-            "score": score,
-            "status": "passing",
-            "review_url": REVIEW_URL,
-            "reviewed_sha": REVIEWED_SHA,
-            "open_findings": list(outcome.findings),
+    dispatch = json.loads(dispatch_path.read_text(encoding="utf-8"))
+    assert dispatch == {
+        "dispatch": "terminal_signal",
+        "terminal_signal": {
+            "signal": "REVIEW_COMPLETE_WITH_FINDINGS",
+            "cycle": cycle,
+            "details": {
+                "score": score,
+                "status": "passing",
+                "review_url": REVIEW_URL,
+                "reviewed_sha": REVIEWED_SHA,
+                "open_findings": list(outcome.findings),
+            },
         },
     }
-    assert fixer_calls == []
-    # The skill routes a non-null completion signal directly to its stop rule.
+    # The skill consumes the command's route directly.
     skill = (CONSENSUS_REVIEW_DIR / "SKILL.md").read_text(encoding="utf-8")
-    assert "Emit the JSON object written to the signal file when it is" in skill
+    assert "follow that route without deriving it independently" in skill
     assert "Do not invoke the fixer" in skill

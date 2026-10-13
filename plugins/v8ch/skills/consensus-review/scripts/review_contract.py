@@ -20,7 +20,7 @@ import argparse
 import json
 import re
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -626,9 +626,8 @@ def dispatch_after_post(
     cycle: int,
     review_url: str | None,
     post_succeeded: bool,
-    invoke_fixer: Callable[[], None],
-) -> dict[str, Any] | None:
-    """Return a terminal signal or invoke the fixer for a repairable outcome."""
+) -> dict[str, Any]:
+    """Return the single route the orchestration prompt must follow."""
     signal = completion_signal(
         outcome,
         cycle=cycle,
@@ -636,8 +635,8 @@ def dispatch_after_post(
         post_succeeded=post_succeeded,
     )
     if signal is None:
-        invoke_fixer()
-    return signal
+        return {"dispatch": "invoke_fixer"}
+    return {"dispatch": "terminal_signal", "terminal_signal": signal}
 
 
 def _require_int(value: object, *, key: str, minimum: int, maximum: int | None) -> int:
@@ -873,14 +872,13 @@ def main(argv: list[str] | None = None) -> int:
             write_json(args.output, serialize_outcome(outcome))
         else:
             outcome = read_outcome(args.outcome_file)
-            signal = dispatch_after_post(
+            dispatch = dispatch_after_post(
                 outcome,
                 cycle=args.cycle,
                 review_url=args.review_url,
                 post_succeeded=not args.post_failed,
-                invoke_fixer=lambda: None,
             )
-            write_json(args.output, signal)
+            write_json(args.output, dispatch)
     except (ContractError, OSError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1

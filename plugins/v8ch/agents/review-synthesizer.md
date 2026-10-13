@@ -114,9 +114,9 @@ Label the score heading `Fully Clean`, `Passing`, or `Failing` to match.
 At 95 or above, an open Should Fix finding still makes the status `passing`;
 do not call that report `clean`. Keep all open findings, including Latent
 Findings, in their numbered report sections so the caller can disposition them.
-The executable contract assigns `completion_kind` `advisory`; the posting script
-renders the completion disposition while the poster summarizes findings and
-evidence.
+The executable contract assigns `completion_kind` `advisory`. You author the
+Summary bullets; the poster copies them verbatim, and the posting script renders
+the completion disposition above them.
 
 ## Citations
 

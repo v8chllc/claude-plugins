@@ -171,8 +171,8 @@ prompt. Agents do not receive skill variables.
    A nonzero exit makes the synthesis incomplete: do not post it. Preserve the
    outcome artifact unchanged for the poster and terminal-signal command. It is
    the only source for the completion state, status branch, reviewed SHA, and
-   findings. The poster writes finding and evidence bullets; the posting script
-   renders the completion state above them.
+   findings. The synthesizer authors the Summary; the poster copies it verbatim,
+   and the posting script renders the completion state above it.
 
 8. **Return or post.**
    - **No PR/MR number:** return the report as-is, emit `REVIEW_COMPLETE` with
@@ -195,15 +195,13 @@ prompt. Agents do not receive skill variables.
    ```
 
    If posting failed, run the same command with `--post-failed` and without
-   `--review-url`. Emit the JSON object written to the signal file when it is
-   non-null. A failed post returns `ABORT`; emit it and stop. A successful
-   `clean` result returns
-   `REVIEW_COMPLETE`. A successful advisory result returns
-   `REVIEW_COMPLETE_WITH_FINDINGS`, including the validated findings in report
-   order and accompanying Latent findings. Emit either returned signal and
-   stop. Do not invoke the fixer for either completion result.
-   - A null signal identifies a `passing` result below 95, a non-advisory
-     `passing` result, or a `failing` result — run
+   `--review-url`. Read the `dispatch` field from the JSON object written to the
+   signal file and follow that route without deriving it independently.
+   - For `terminal_signal`, emit the nested `terminal_signal` object and stop.
+     It is `ABORT`, `REVIEW_COMPLETE`, or `REVIEW_COMPLETE_WITH_FINDINGS` and
+     includes the validated findings in report order and accompanying Latent
+     findings where applicable. Do not invoke the fixer.
+   - For `invoke_fixer`, run
      `references/fix-workflow.md`, then review again if the budget allows.
      That workflow returns an outcome; this skill emits the signal, following
      the precedence list in its Step 5 so two identical runs cannot end on

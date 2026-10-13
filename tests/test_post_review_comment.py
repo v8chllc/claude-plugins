@@ -183,7 +183,14 @@ def test_explicit_platform_overrides_the_env_file(tmp_path: Path) -> None:
 def test_summary_accepts_one_to_three_bullets() -> None:
     module = load_post_review_comment()
     assert module.validate_summary("- one\n") == "- one"
-    assert module.validate_summary("- one\n\n- two\n- three\n").count("\n") == 2
+    summary = "- one\n\n- two\n- three\n"
+    assert module.validate_summary(summary) == summary.strip()
+
+
+def test_summary_accepts_and_preserves_indented_continuation_lines() -> None:
+    module = load_post_review_comment()
+    summary = "- A long synthesized bullet\n  continues on the next line.\n"
+    assert module.validate_summary(summary) == summary.strip()
 
 
 @pytest.mark.parametrize(

@@ -11,6 +11,7 @@ SCRIPTS_DIR = REPO_ROOT / "plugins/v8ch/skills/consensus-review/scripts"
 FIXTURES_DIR = REPO_ROOT / "tests/fixtures/consensus-review"
 SKILL_FILE = REPO_ROOT / "plugins/v8ch/skills/consensus-review/SKILL.md"
 POSTER_AGENT = REPO_ROOT / "plugins/v8ch/agents/consensus-review-poster.md"
+SYNTHESIZER_AGENT = REPO_ROOT / "plugins/v8ch/agents/review-synthesizer.md"
 
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
@@ -540,9 +541,13 @@ None.
     )
 
     outcome = json.loads(outcome_file.read_text(encoding="utf-8"))
-    signal = json.loads(signal_file.read_text(encoding="utf-8"))
+    dispatch = json.loads(signal_file.read_text(encoding="utf-8"))
     assert outcome["reviewed_sha"] == "abc1234"
-    assert signal["details"]["reviewed_sha"] == outcome["reviewed_sha"]
+    assert dispatch["dispatch"] == "terminal_signal"
+    assert (
+        dispatch["terminal_signal"]["details"]["reviewed_sha"]
+        == outcome["reviewed_sha"]
+    )
 
 
 def test_resolve_command_rejects_an_invalid_report_without_an_artifact(
@@ -747,14 +752,16 @@ def test_outcome_commands_route_the_exact_posted_review(
         signal_command.extend(["--review-url", "https://example.test/review/7"])
     subprocess.run(signal_command, check=True)
     outcome = json.loads(outcome_file.read_text(encoding="utf-8"))
-    signal = json.loads(signal_file.read_text(encoding="utf-8"))
+    dispatch = json.loads(signal_file.read_text(encoding="utf-8"))
     assert outcome["reviewed_sha"] == "abc1234"
     assert [finding["id"] for finding in outcome["findings"]] == [
         f"F-{number}" for number in range(1, len(severities) + 1)
     ]
     if expected_signal is None:
-        assert signal is None
+        assert dispatch == {"dispatch": "invoke_fixer"}
         return
+    assert dispatch["dispatch"] == "terminal_signal"
+    signal = dispatch["terminal_signal"]
     assert signal["signal"] == expected_signal
     assert signal["cycle"] == cycle
     assert signal["details"]["score"] == score
@@ -1113,7 +1120,7 @@ def test_posted_advisory_branch_precedes_the_fixer() -> None:
     assert "validated findings" in branch
     assert "outcome-file" in branch
     assert "`post_failed`" in skill
-    assert "`score`, `status`, `review_url`, `reviewed_sha`, `open_findings`" in skill
+    assert "follow that route without deriving it independently" in skill
 
     poster = POSTER_AGENT.read_text(encoding="utf-8")
     assert "Summary` bullets verbatim" in poster
@@ -1121,6 +1128,13 @@ def test_posted_advisory_branch_precedes_the_fixer() -> None:
     assert "sole completion disposition deterministically" in poster.replace("\n", " ")
     assert "caller will disposition open findings" not in poster
     assert "--outcome-file" in poster
+
+    synthesizer = SYNTHESIZER_AGENT.read_text(encoding="utf-8")
+    assert (
+        "You author the\nSummary bullets; the poster copies them verbatim"
+        in synthesizer
+    )
+    assert "The synthesizer authors the Summary; the poster copies it verbatim" in skill
 
 
 def test_a_repository_relative_plan_path_is_accepted() -> None:
