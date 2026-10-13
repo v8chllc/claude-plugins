@@ -50,7 +50,7 @@ reading this comment have no checkout of your machine.
 Match the first bullet to the status:
 
 - `clean` — `- Review passed with a score of N/100. No fixes are required.`
-- `passing` — `- Review passed with a score of N/100. A fix cycle will address the open findings.`
+- `passing` — `- Review passed with a score of N/100. The caller will disposition the open findings.`
 - `failing` — `- Review failed with a score of N/100. Fixes are required before merge.`
 
 ## Step 3 — Write the report file and post

@@ -1,6 +1,6 @@
 ---
 name: consensus-review
-description: Runs an autonomous, evidence-gated consensus code review. Use when reviewing code changes, before pushing a PR, or as the review step in a development workflow. Runs three independent reviewers in parallel, synthesizes a consequence-ranked report with a 1-100 quality score, and posts one review comment per cycle to the PR or MR. On a PR or MR it also fixes and re-reviews, up to three reviews per invocation by default or one when the caller declares a single-cycle cap. Accepts an optional plan file as review context. Scope defaults to all local changes; also accepts a PR/MR number, a base commit SHA, a branch diff, or an explicit file list.
+description: Runs an autonomous, evidence-gated consensus code review. Use when reviewing code changes, before pushing a PR, or as the review step in a development workflow. Runs three independent reviewers in parallel, synthesizes a consequence-ranked report with a 1-100 quality score, and posts one review comment per cycle to the PR or MR. On a PR or MR it returns 95+ reviews with open Should Fix findings to the caller for disposition; other non-clean reviews enter a fix cycle, up to three reviews per invocation by default or one when the caller declares a single-cycle cap. Accepts an optional plan file as review context. Scope defaults to all local changes; also accepts a PR/MR number, a base commit SHA, a branch diff, or an explicit file list.
 ---
 
 # Consensus Review
@@ -18,8 +18,8 @@ branches. It ends with exactly one terminal signal.
 
 - Three reviewer reports, each with a complete Evidence section.
 - One synthesized report carrying a score, a status, and numbered findings.
-- On a PR/MR: one posted review comment per cycle, and fix evidence in the fix
-  commit body rather than in a second comment.
+- On a PR/MR: one posted review comment per cycle, with caller disposition for
+  advisory findings or fix evidence in the fix commit body.
 - Exactly one fenced `consensus-review-signal` block as the last output.
 
 ## Inputs
@@ -165,13 +165,35 @@ prompt. Agents do not receive skill variables.
      mode, the plan source, the reviewed SHA, the scope basis, the blast-radius
      counts, the repository directory, `${CLAUDE_SKILL_DIR}`, and a scratch
      directory. Capture the comment URL. If posting fails, emit `ABORT` with
-     `reason` `post_failed`.
+     `reason` `post_failed` and stop. A completion signal requires a successfully
+     posted comment.
 
 9. **Branch on the status.**
    - `clean` — emit `CAPPED_REVIEW_COMPLETE` with empty `commit_shas`,
      `work_items`, `failed_commands`, and `unproven_findings` lists and a null
      `fixer_outcome` when the caller declared the cap; otherwise emit
      `REVIEW_COMPLETE`. Stop.
+   - `passing` with score at least 95, no numbered open `Must Fix`, and at
+     least one numbered open `Should Fix` — after the poster succeeds, run:
+
+     ```bash
+     uv run ${CLAUDE_SKILL_DIR}/scripts/review_contract.py advisory \
+       --report-file <scratch-dir>/review-<cycle:02d>.md \
+       --score <synthesized-score> --status passing
+     ```
+
+     The helper returns a JSON list of `{ "id": "F-N", "section":
+     "Should Fix|Latent Findings" }` entries in report order, or `null` when
+     the review does not qualify. It checks the score and status against the
+     posted report. If it returns a list, emit
+     `REVIEW_COMPLETE_WITH_FINDINGS` with `score` and `status` from the
+     synthesis, `review_url` from the successful poster result,
+     `reviewed_sha` exactly as supplied to the poster for this cycle, and
+     `open_findings` set to that list. Stop without invoking the fixer. Every
+     returned finding awaits the caller's disposition. Apply this route on
+     every review cycle, including a caller-capped invocation. A helper error
+     ends in `ABORT` with `reason` `command_failed`; never report completion
+     after an error.
    - `passing` or `failing` — run `references/fix-workflow.md`, then review
      again if the budget allows. The capped invocation still runs this normal
      fix workflow, including its quality and proof checks. It never starts a
@@ -189,7 +211,8 @@ toolchain wrote the earlier cycles. Cycle numbers themselves accumulate with no
 cap. Ignore a single-cycle cap without a PR/MR number: local reviews already
 end after one review and do not fix.
 
-When the third review is still not `clean`, the run ends on the first matching
+When the third review has not returned the advisory handoff or reached `clean`,
+the run ends on the first matching
 signal in the fix workflow's Step 5 precedence list. In short: unresolved
 findings give `BLOCKERS_REMAIN`, a pushed third-cycle fix gives `PUSH_COMPLETE`,
 and a third review that produced no commit gives `MAX_REVIEWS_REACHED`. Without
@@ -240,6 +263,7 @@ finish; it does not assert that a pushed fix was reviewed.
 | Signal | When | `details` keys |
 | --- | --- | --- |
 | `REVIEW_COMPLETE` | A local review returned its report, or a PR/MR review reached `clean` | `score`, `status`, `review_url` |
+| `REVIEW_COMPLETE_WITH_FINDINGS` | A posted PR/MR review scored at least 95 with open `Should Fix` and no open `Must Fix`; the caller must disposition each returned finding | `score`, `status`, `review_url`, `reviewed_sha`, `open_findings` |
 | `CAPPED_REVIEW_COMPLETE` | A caller-capped PR/MR invocation completed its one review and, for `passing` or `failing`, its normal fix workflow; no second review runs, including after proof or quality failure | `score`, `status`, `review_url`, `commit_shas`, `work_items`, `fixer_outcome`, `failed_commands`, `unproven_findings` |
 | `NO_DIFF` | Nothing to review | `scope` |
 | `EVIDENCE_FAILED` | A reviewer failed the evidence gate twice | `failed_passes` |
