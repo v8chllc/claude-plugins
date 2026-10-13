@@ -12,6 +12,7 @@ PROFILE_HEADING = "## Agent workflow profile"
 EXPECTED_PROFILE = {
     "tracking": "required",
     "merge_method": "rebase",
+    "review_capability": "coderabbit",
     "quality_commands": [
         "npm run lint:md",
         "uv run ruff check .",
