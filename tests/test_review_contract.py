@@ -164,6 +164,21 @@ def test_advisory_handoff_ignores_finding_headings_inside_fences() -> None:
     ]
 
 
+def test_backtick_in_fence_info_does_not_hide_report_findings() -> None:
+    report = (
+        "### Quality Score: 96/100 — Passing\n\n"
+        "### Must Fix\n\nNone.\n\n"
+        "### Should Fix\n\n#### [F-1] [LOW] first\n\n"
+        "```language`invalid\n"
+        "#### [F-2] [LOW] second\n\n"
+        "### Latent Findings\n\nNone.\n"
+    )
+    assert contract.advisory_open_findings(report, score=96, status="passing") == [
+        {"id": "F-1", "section": "Should Fix"},
+        {"id": "F-2", "section": "Should Fix"},
+    ]
+
+
 @pytest.mark.parametrize(
     ("severities", "expected_score", "expected_handoff"),
     [
