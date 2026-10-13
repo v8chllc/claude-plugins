@@ -42,7 +42,7 @@ def test_marketplace_points_to_valid_plugin_manifest() -> None:
 
     manifest = load_json(plugin_root / ".claude-plugin" / "plugin.json")
     assert manifest["name"] == entry["name"]
-    assert manifest["version"] == "2.0.9"
+    assert manifest["version"] == "2.0.8"
     assert manifest["description"]
 
 
