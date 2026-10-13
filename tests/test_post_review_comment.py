@@ -259,7 +259,9 @@ def test_status_icons(status: str, icon: str, score: int) -> None:
     """Each status renders its icon; the score must sit in that status's band."""
     module = load_post_review_comment()
     body = module.build_comment_body(
-        report_text=REPORT.replace("91/100", f"{score}/100"),
+        report_text=REPORT.replace(
+            "91/100 — Passing", f"{score}/100 — {module.status_label(status)}"
+        ),
         summary_text=SUMMARY,
         cycle=1,
         status=status,
@@ -491,6 +493,25 @@ def test_a_status_contradicting_the_score_is_refused(status: str, score: int) ->
             cycle=1,
             status=status,
             score=score,
+            delegation_mode="parallel-subagents",
+            plan_source="none",
+            reviewed_sha="1a2b3c4",
+            scope_basis="full-diff",
+            files_touched=1,
+            findings_opened=0,
+            findings_closed=0,
+        )
+
+
+def test_a_status_contradicting_the_report_is_refused() -> None:
+    module = load_post_review_comment()
+    with pytest.raises(module.ContractError, match="status"):
+        module.build_comment_body(
+            report_text=REPORT.replace("91/100 — Passing", "96/100 — Passing"),
+            summary_text=SUMMARY,
+            cycle=1,
+            status="clean",
+            score=96,
             delegation_mode="parallel-subagents",
             plan_source="none",
             reviewed_sha="1a2b3c4",

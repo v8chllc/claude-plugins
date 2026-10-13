@@ -27,6 +27,7 @@ from string import Template
 
 from review_contract import (
     ContractError,
+    advisory_open_findings,
     build_metadata,
     extract_quality_score,
     render_metadata_block,
@@ -168,6 +169,7 @@ def build_comment_body(
 ) -> str:
     """Build the full review comment, metadata block first."""
     validate_report(report_text)
+    advisory_open_findings(report_text, score=score, status=status)
     metadata = build_metadata(
         cycle=cycle,
         status=status,

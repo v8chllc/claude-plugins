@@ -1,4 +1,5 @@
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -119,6 +120,99 @@ def test_extract_quality_score_reads_the_report_heading() -> None:
     report = "intro\n\n### Quality Score: 73/100 — Failing\n\nrest\n"
     assert contract.extract_quality_score(report) == 73
     assert contract.extract_quality_score("no heading here") is None
+
+
+def advisory_report(score: int, status: str, *, must_fix: bool = False) -> str:
+    must = "#### [F-0] [LOW] blocker\n" if must_fix else "None.\n"
+    return (
+        f"### Quality Score: {score}/100 — {status}\n\n"
+        f"### Must Fix\n\n{must}\n"
+        "### Should Fix\n\n#### [F-1] [LOW] first\n\n"
+        "#### [F-2] [LOW] second\n\n"
+        "### Latent Findings\n\n#### [F-3] [LOW] latent\n"
+    )
+
+
+@pytest.mark.parametrize("score", [95, 96])
+def test_advisory_handoff_keeps_report_order_at_threshold(score: int) -> None:
+    report = advisory_report(score, "Passing")
+    assert contract.advisory_open_findings(report, score=score, status="passing") == [
+        {"id": "F-1", "section": "Should Fix"},
+        {"id": "F-2", "section": "Should Fix"},
+        {"id": "F-3", "section": "Latent Findings"},
+    ]
+
+
+def test_advisory_handoff_does_not_bypass_a_94_or_must_fix() -> None:
+    report = advisory_report(94, "Passing")
+    assert contract.advisory_open_findings(report, score=94, status="passing") is None
+    report = advisory_report(96, "Passing", must_fix=True)
+    assert contract.advisory_open_findings(report, score=96, status="passing") is None
+
+
+@pytest.mark.parametrize(
+    ("severities", "expected_score", "expected_handoff"),
+    [
+        (["LOW", "LOW"], 96, True),
+        (["MEDIUM"], 95, True),
+        (["LOW", "LOW", "LOW"], 94, False),
+    ],
+)
+def test_advisory_boundary_uses_the_existing_score_contract(
+    severities: list[str], expected_score: int, expected_handoff: bool
+) -> None:
+    findings = [
+        contract.Finding(f"F-{index}", contract.SHOULD_FIX, severity)
+        for index, severity in enumerate(severities, start=1)
+    ]
+    score = contract.score_findings(findings)
+    status = contract.review_status(score, findings)
+    report = (
+        f"### Quality Score: {score}/100 — {contract.status_label(status)}\n\n"
+        "### Must Fix\n\nNone.\n\n### Should Fix\n\n"
+        + "\n".join(
+            f"#### [{finding.identifier}] [{finding.severity}] finding"
+            for finding in findings
+        )
+        + "\n\n### Latent Findings\n\nNone.\n"
+    )
+    assert score == expected_score
+    handoff = contract.advisory_open_findings(report, score=score, status=status)
+    assert (handoff is not None) == expected_handoff
+
+
+def test_advisory_handoff_requires_score_and_status_to_match_report() -> None:
+    report = advisory_report(96, "Passing")
+    with pytest.raises(contract.ContractError, match="score"):
+        contract.advisory_open_findings(report, score=95, status="passing")
+    with pytest.raises(contract.ContractError, match="status"):
+        contract.advisory_open_findings(report, score=96, status="clean")
+
+
+def test_advisory_cli_emits_the_compact_handoff(tmp_path: Path) -> None:
+    report_file = tmp_path / "report.md"
+    report_file.write_text(advisory_report(96, "Passing"), encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS_DIR / "review_contract.py"),
+            "advisory",
+            "--report-file",
+            str(report_file),
+            "--score",
+            "96",
+            "--status",
+            "passing",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert json.loads(result.stdout) == [
+        {"id": "F-1", "section": "Should Fix"},
+        {"id": "F-2", "section": "Should Fix"},
+        {"id": "F-3", "section": "Latent Findings"},
+    ]
 
 
 def test_valid_metadata_fixture_passes_validation() -> None:

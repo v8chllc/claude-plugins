@@ -5,7 +5,8 @@ repository's own quality commands, commits directly with `git`, and pushes to th
 PR/MR head branch.
 
 This workflow is PR/MR-only. A local review never fixes. It runs when the
-synthesized status is `passing` or `failing`; a `clean` review skips it.
+synthesized status is `passing` or `failing` and Step 9 of the skill did not
+return the advisory handoff. A `clean` review skips it.
 
 Fix evidence lives in the commit body. No fix-validation comment is posted, and
 no other skill is invoked.

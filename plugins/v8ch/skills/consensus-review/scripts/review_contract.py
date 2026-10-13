@@ -10,10 +10,13 @@ repositories.
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
+import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = 2
@@ -81,6 +84,11 @@ _WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 
 SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
 QUALITY_SCORE_RE = re.compile(r"^### Quality Score:\s*(\d+)/100\b", re.MULTILINE)
+REPORT_STATUS_RE = re.compile(
+    r"^### Quality Score:\s*\d+/100\s+—\s+(Fully Clean|Passing|Failing)\s*$",
+    re.MULTILINE,
+)
+FINDING_HEADING_RE = re.compile(r"^#### \[(F-\d+)\] \[[A-Z]+\] ", re.MULTILINE)
 METADATA_BLOCK_RE = re.compile(
     rf"<!--\s*{COMMENT_MARKER}\s*(.*?)\s*-->",
     re.DOTALL,
@@ -168,6 +176,65 @@ def extract_quality_score(report_text: str) -> int | None:
     """Return the raw score from a synthesized report heading, if present."""
     match = QUALITY_SCORE_RE.search(report_text)
     return int(match.group(1)) if match else None
+
+
+def advisory_open_findings(
+    report_text: str, *, score: int, status: str
+) -> list[dict[str, str]] | None:
+    """Return the ordered advisory handoff, or None when the fix loop applies.
+
+    The posted report owns finding prose. This reads only its numbered headings
+    and refuses a handoff when the report's score or status contradicts metadata.
+    """
+    if extract_quality_score(report_text) != score:
+        raise ContractError("The report score and review metadata disagree.")
+    report_status = REPORT_STATUS_RE.search(report_text)
+    if report_status is None or report_status.group(1) != status_label(status):
+        raise ContractError("The report status and review metadata disagree.")
+    if score < CLEAN_MIN_SCORE or status != STATUS_PASSING:
+        return None
+
+    sections: dict[str, list[str]] = {
+        "Must Fix": [],
+        "Should Fix": [],
+        "Latent Findings": [],
+    }
+    current_section: str | None = None
+    ordered: list[dict[str, str]] = []
+    for line in report_text.splitlines():
+        if line.startswith("### "):
+            heading = line[4:].strip()
+            current_section = heading if heading in sections else None
+        elif current_section is not None:
+            match = FINDING_HEADING_RE.match(line)
+            if match:
+                identifier = match.group(1)
+                sections[current_section].append(identifier)
+                if current_section != "Must Fix":
+                    ordered.append({"id": identifier, "section": current_section})
+    if sections["Must Fix"] or not sections["Should Fix"]:
+        return None
+    return ordered
+
+
+def advisory_cli(argv: list[str] | None = None) -> int:
+    """Print the compact handoff from the exact report given to the poster."""
+    parser = argparse.ArgumentParser(description="Inspect an advisory review report.")
+    parser.add_argument("advisory", choices=["advisory"])
+    parser.add_argument("--report-file", required=True)
+    parser.add_argument("--score", type=int, required=True)
+    parser.add_argument("--status", choices=STATUSES, required=True)
+    args = parser.parse_args(argv)
+    try:
+        report_text = Path(args.report_file).read_text(encoding="utf-8")
+        findings = advisory_open_findings(
+            report_text, score=args.score, status=args.status
+        )
+    except (OSError, ContractError) as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps(findings, separators=(",", ":")))
+    return 0
 
 
 def _require_int(value: object, *, key: str, minimum: int, maximum: int | None) -> int:
@@ -365,3 +432,7 @@ def is_legacy_review(payload: dict[str, Any]) -> bool:
 def strip_metadata_block(body: str) -> str:
     """Remove the hidden metadata block from a comment body."""
     return METADATA_BLOCK_RE.sub("", body, count=1).strip()
+
+
+if __name__ == "__main__":
+    raise SystemExit(advisory_cli())
