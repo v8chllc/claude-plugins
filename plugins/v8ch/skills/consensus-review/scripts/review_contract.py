@@ -179,6 +179,32 @@ def extract_quality_score(report_text: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _structural_markdown_lines(report_text: str) -> Iterable[str]:
+    """Yield report lines outside fenced code blocks.
+
+    Quoted finding headings are report evidence, not advisory routing input.
+    """
+    fence_character: str | None = None
+    fence_length = 0
+    for line in report_text.splitlines():
+        if fence_character is not None:
+            closing_fence = re.compile(
+                rf"^ {{0,3}}{re.escape(fence_character)}{{{fence_length},}}[ \t]*$"
+            )
+            if closing_fence.match(line):
+                fence_character = None
+                fence_length = 0
+            continue
+        match = FENCE_OPEN_RE.match(line)
+        if match is not None:
+            marker, info = match.groups()
+            if marker[0] == "~" or "`" not in info:
+                fence_character = marker[0]
+                fence_length = len(marker)
+                continue
+        yield line
+
+
 def advisory_open_findings(
     report_text: str, *, score: int, status: str
 ) -> list[dict[str, str]] | None:
@@ -201,21 +227,8 @@ def advisory_open_findings(
         "Latent Findings": [],
     }
     current_section: str | None = None
-    fence: tuple[str, int] | None = None
     ordered: list[dict[str, str]] = []
-    for line in report_text.splitlines():
-        if fence is not None:
-            marker, minimum_length = fence
-            closing_fence = rf"^ {{0,3}}{re.escape(marker)}{{{minimum_length},}}\s*$"
-            if re.match(closing_fence, line):
-                fence = None
-            continue
-        fence_match = FENCE_OPEN_RE.match(line)
-        if fence_match is not None:
-            marker_run, info = fence_match.groups()
-            if marker_run[0] == "~" or "`" not in info:
-                fence = (marker_run[0], len(marker_run))
-                continue
+    for line in _structural_markdown_lines(report_text):
         if line.startswith("### "):
             heading = line[4:].strip()
             current_section = heading if heading in sections else None
