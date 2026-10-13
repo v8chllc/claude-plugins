@@ -242,6 +242,72 @@ def test_summary_file_must_match_the_synthesized_report() -> None:
         )
 
 
+def test_summary_extraction_ignores_a_heading_inside_a_fenced_example() -> None:
+    module = load_post_review_comment()
+    report = REPORT.replace(
+        "### Summary",
+        "```markdown\n### Summary\n- Example only.\n```\n\n### Summary",
+        1,
+    )
+    assert module.extract_report_summary(report) == SUMMARY.strip()
+
+
+def test_summary_extraction_rejects_duplicate_top_level_sections() -> None:
+    module = load_post_review_comment()
+    report = REPORT.replace(
+        "### Must Fix", "### Summary\n\n- Duplicate.\n\n### Must Fix", 1
+    )
+    with pytest.raises(module.ContractError, match="exactly one Summary"):
+        module.extract_report_summary(report)
+
+
+def test_summary_accepts_quoted_defective_completion_wording() -> None:
+    module = load_post_review_comment()
+    summary = '- The CLI incorrectly says "work is complete" before upload finishes.'
+    report = REPORT.replace(SUMMARY.strip(), summary, 1)
+    outcome = module.resolve_review_outcome(
+        report, score=90, status="passing", reviewed_sha="1a2b3c4"
+    )
+    body = module.build_comment_body(
+        report_text=report,
+        summary_text=summary,
+        cycle=2,
+        outcome=outcome,
+        delegation_mode="parallel-subagents",
+        plan_source="none",
+        scope_basis="full-diff",
+        files_touched=3,
+        findings_opened=2,
+        findings_closed=1,
+    )
+    assert summary in body
+
+
+def test_summary_extraction_preserves_fenced_supporting_evidence() -> None:
+    module = load_post_review_comment()
+    summary = (
+        "- The CLI emits this premature status:\n  ```text\n  work is complete\n  ```"
+    )
+    report = REPORT.replace(SUMMARY.strip(), summary, 1)
+    outcome = module.resolve_review_outcome(
+        report, score=90, status="passing", reviewed_sha="1a2b3c4"
+    )
+    body = module.build_comment_body(
+        report_text=report,
+        summary_text=summary,
+        cycle=2,
+        outcome=outcome,
+        delegation_mode="parallel-subagents",
+        plan_source="none",
+        scope_basis="full-diff",
+        files_touched=3,
+        findings_opened=2,
+        findings_closed=1,
+    )
+    assert module.extract_report_summary(report) == summary
+    assert summary in body
+
+
 def test_report_must_carry_merged_evidence() -> None:
     module = load_post_review_comment()
     with pytest.raises(module.ContractError, match="Evidence"):

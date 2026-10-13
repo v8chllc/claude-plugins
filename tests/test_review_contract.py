@@ -1130,9 +1130,12 @@ def test_posted_advisory_branch_precedes_the_fixer() -> None:
     assert "--outcome-file" in poster
 
     synthesizer = SYNTHESIZER_AGENT.read_text(encoding="utf-8")
-    assert (
-        "You author the\nSummary bullets; the poster copies them verbatim"
-        in synthesizer
+    assert "You author the Summary bullets; the poster copies them verbatim" in (
+        " ".join(synthesizer.split())
+    )
+    assert "Limit Summary bullets to findings and" in (" ".join(synthesizer.split()))
+    assert "fixes or follow-up are or are not required" in (
+        " ".join(synthesizer.split())
     )
     assert "The synthesizer authors the Summary; the poster copies it verbatim" in skill
 

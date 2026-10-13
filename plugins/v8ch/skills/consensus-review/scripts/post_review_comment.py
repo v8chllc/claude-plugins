@@ -9,7 +9,7 @@
 Reads the platform from ``DEV_SEC_OPS_PLATFORM`` or ``--platform``, validates
 every schema-v2 field against ``review_contract``, renders
 ``templates/review-comment.md.tmpl``, and posts the result with ``gh`` or
-``glab``. Status and summary authorship stay with the synthesizer; this script
+``glab``. Status and summary authorship stay with the calling role; this script
 owns validation, deterministic rendering, and transport.
 
 Byte-identical to the Codex copy in ``v8chllc/codex-plugins`` apart from this
@@ -33,6 +33,7 @@ from review_contract import (
     ContractError,
     ReviewOutcome,
     build_metadata,
+    extract_top_level_section,
     read_outcome,
     render_metadata_block,
     resolve_review_outcome,
@@ -122,20 +123,7 @@ def validate_summary(summary_text: str) -> str:
 
 def extract_report_summary(report_text: str) -> str:
     """Extract and validate the synthesized report's Summary section."""
-    lines = report_text.splitlines()
-    try:
-        heading_index = lines.index(SUMMARY_HEADING)
-    except ValueError as error:
-        raise ContractError(
-            "The report is missing its '### Summary' section."
-        ) from error
-
-    section_lines: list[str] = []
-    for line in lines[heading_index + 1 :]:
-        if line.startswith("### "):
-            break
-        section_lines.append(line)
-    report_summary = "\n".join(section_lines).strip()
+    report_summary = extract_top_level_section(report_text, SUMMARY_HEADING)
     validate_summary(report_summary)
     return report_summary
 

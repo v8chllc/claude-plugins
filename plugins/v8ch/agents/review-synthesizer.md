@@ -116,7 +116,10 @@ do not call that report `clean`. Keep all open findings, including Latent
 Findings, in their numbered report sections so the caller can disposition them.
 The executable contract assigns `completion_kind` `advisory`. You author the
 Summary bullets; the poster copies them verbatim, and the posting script renders
-the completion disposition above them.
+the completion disposition above them. Limit Summary bullets to findings and
+supporting evidence. Do not claim that the review or work is complete, that
+fixes or follow-up are or are not required, or that any finding has been
+dispositioned.
 
 ## Citations
 
@@ -129,7 +132,9 @@ checkout.
 ## Output
 
 The report is your whole response. No preamble, no narration, no closing offer.
-One to three sentences per field. Emit these sections in this order and stop
+One to three sentences per field. The Summary contains one to three bullets
+limited to findings and evidence, with no completion, fix-requirement,
+follow-up, or disposition claims. Emit these sections in this order and stop
 after the Score Breakdown:
 
 ```markdown
