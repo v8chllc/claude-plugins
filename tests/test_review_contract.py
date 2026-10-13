@@ -150,6 +150,20 @@ def test_advisory_handoff_does_not_bypass_a_94_or_must_fix() -> None:
     assert contract.advisory_open_findings(report, score=96, status="passing") is None
 
 
+def test_advisory_handoff_ignores_finding_headings_inside_fences() -> None:
+    report = advisory_report(96, "Passing").replace(
+        "#### [F-2] [LOW] second",
+        "#### [F-2] [LOW] second\n\n"
+        "```markdown\n#### [F-99] [CRITICAL] example only\n```\n\n"
+        "~~~~ text\n#### [F-100] [HIGH] another example\n~~~~",
+    )
+    assert contract.advisory_open_findings(report, score=96, status="passing") == [
+        {"id": "F-1", "section": "Should Fix"},
+        {"id": "F-2", "section": "Should Fix"},
+        {"id": "F-3", "section": "Latent Findings"},
+    ]
+
+
 @pytest.mark.parametrize(
     ("severities", "expected_score", "expected_handoff"),
     [
@@ -213,6 +227,53 @@ def test_advisory_cli_emits_the_compact_handoff(tmp_path: Path) -> None:
         {"id": "F-2", "section": "Should Fix"},
         {"id": "F-3", "section": "Latent Findings"},
     ]
+
+
+def test_advisory_cli_reports_a_missing_report(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS_DIR / "review_contract.py"),
+            "advisory",
+            "--report-file",
+            str(tmp_path / "missing.md"),
+            "--score",
+            "96",
+            "--status",
+            "passing",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr.startswith("Error: ")
+    assert "missing.md" in result.stderr
+
+
+def test_advisory_cli_reports_a_contract_mismatch(tmp_path: Path) -> None:
+    report_file = tmp_path / "report.md"
+    report_file.write_text(advisory_report(96, "Passing"), encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS_DIR / "review_contract.py"),
+            "advisory",
+            "--report-file",
+            str(report_file),
+            "--score",
+            "95",
+            "--status",
+            "passing",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert result.stderr == "Error: The report score and review metadata disagree.\n"
 
 
 def test_valid_metadata_fixture_passes_validation() -> None:

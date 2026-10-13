@@ -3,7 +3,7 @@
   "files": {
     "plugins/v8ch/skills/consensus-review/scripts/post_review_comment.py": "43329d50511705f69eea0f3b6851d1daedc1fd56b7ab8a4acb7885e33fcc6283",
     "plugins/v8ch/skills/consensus-review/scripts/recover_context.py": "87116f67f5924b12338f8069d39e053528094c26e5631beb4fca3c4f1bdd7f22",
-    "plugins/v8ch/skills/consensus-review/scripts/review_contract.py": "a32546616f9f14dd299eab585bdaf16281a191a25bba9c9176e15a4fbea8565b",
+    "plugins/v8ch/skills/consensus-review/scripts/review_contract.py": "71b00341e9ff0d669524f25e96ec2c34892d66299b8fd0221d2a73f768bda207",
     "plugins/v8ch/skills/consensus-review/templates/review-comment.md.tmpl": "35e6b994766175ea96b5d6f69526facc77bdf05528b7b3d72f7822d7649400ae",
     "tests/fixtures/consensus-review/comments-github.json": "0ace68051c0670b371cb34031e9eed358b99c40a67f12c1d42bd365ab2573875",
     "tests/fixtures/consensus-review/comments-gitlab.json": "e0eb34db81cdba1cf2730f9c9475af2ff8fa5110144ea8cef9f3cf5a33ac19a2",
