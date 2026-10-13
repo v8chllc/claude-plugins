@@ -193,6 +193,13 @@ def test_summary_accepts_and_preserves_indented_continuation_lines() -> None:
     assert module.validate_summary(summary) == summary.strip()
 
 
+def test_summary_rejects_more_than_three_indented_bullets() -> None:
+    module = load_post_review_comment()
+    summary = "- one\n - two\n  - three\n   - four\n"
+    with pytest.raises(module.ContractError, match="got 4"):
+        module.validate_summary(summary)
+
+
 @pytest.mark.parametrize(
     "summary",
     [

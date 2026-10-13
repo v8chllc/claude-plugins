@@ -1,7 +1,7 @@
 {
   "description": "sha256 per parity-tracked file, over content with any Python module docstring removed. Identical in claude-plugins and codex-plugins. Regenerate with tests/test_consensus_review_parity.py.",
   "files": {
-    "plugins/v8ch/skills/consensus-review/scripts/post_review_comment.py": "ab6038e3bb56270e6fff32b288e2ccfd557aee47abd213edeb440043bcea6fe5",
+    "plugins/v8ch/skills/consensus-review/scripts/post_review_comment.py": "da8a053b55327221f283999c14dfc1149e0b2393ddc022196dd860adc77250d6",
     "plugins/v8ch/skills/consensus-review/scripts/recover_context.py": "87116f67f5924b12338f8069d39e053528094c26e5631beb4fca3c4f1bdd7f22",
     "plugins/v8ch/skills/consensus-review/scripts/review_contract.py": "c9810e3a46a2f8573dbfb2956983608f3efab62e35bc35ca89728665656a019b",
     "plugins/v8ch/skills/consensus-review/templates/review-comment.md.tmpl": "35e6b994766175ea96b5d6f69526facc77bdf05528b7b3d72f7822d7649400ae",

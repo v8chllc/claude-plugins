@@ -19,6 +19,7 @@ docstring.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -53,6 +54,7 @@ EVIDENCE_HEADING = "### Evidence"
 SUMMARY_HEADING = "### Summary"
 MIN_SUMMARY_BULLETS = 1
 MAX_SUMMARY_BULLETS = 3
+SUMMARY_BULLET_PATTERN = re.compile(r"^ {0,3}- ")
 
 COMPLETION_NOTICES = {
     COMPLETION_CLEAN: "Complete; no open findings.",
@@ -103,7 +105,7 @@ def validate_summary(summary_text: str) -> str:
     for line in lines:
         if not line.strip():
             continue
-        if line.startswith("- "):
+        if SUMMARY_BULLET_PATTERN.match(line):
             bullet_count += 1
         elif not line[:1].isspace():
             raise ContractError(
