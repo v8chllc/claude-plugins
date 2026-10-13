@@ -89,6 +89,7 @@ REPORT_STATUS_RE = re.compile(
     re.MULTILINE,
 )
 FINDING_HEADING_RE = re.compile(r"^#### \[(F-\d+)\] \[[A-Z]+\] ", re.MULTILINE)
+FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 METADATA_BLOCK_RE = re.compile(
     rf"<!--\s*{COMMENT_MARKER}\s*(.*?)\s*-->",
     re.DOTALL,
@@ -200,8 +201,21 @@ def advisory_open_findings(
         "Latent Findings": [],
     }
     current_section: str | None = None
+    fence: tuple[str, int] | None = None
     ordered: list[dict[str, str]] = []
     for line in report_text.splitlines():
+        if fence is not None:
+            marker, minimum_length = fence
+            closing_fence = rf"^ {{0,3}}{re.escape(marker)}{{{minimum_length},}}\s*$"
+            if re.match(closing_fence, line):
+                fence = None
+            continue
+        fence_match = FENCE_OPEN_RE.match(line)
+        if fence_match is not None:
+            marker_run, info = fence_match.groups()
+            if marker_run[0] == "~" or "`" not in info:
+                fence = (marker_run[0], len(marker_run))
+                continue
         if line.startswith("### "):
             heading = line[4:].strip()
             current_section = heading if heading in sections else None
