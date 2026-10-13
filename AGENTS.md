@@ -29,6 +29,7 @@ typing, and testing expectations, read `CODING_STANDARDS.md`.
 ```yaml
 tracking: required
 merge_method: rebase
+review_capability: coderabbit
 quality_commands:
   - npm run lint:md
   - uv run ruff check .
