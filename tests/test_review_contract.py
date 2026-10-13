@@ -1116,7 +1116,8 @@ def test_posted_advisory_branch_precedes_the_fixer() -> None:
     assert "`score`, `status`, `review_url`, `reviewed_sha`, `open_findings`" in skill
 
     poster = POSTER_AGENT.read_text(encoding="utf-8")
-    assert "Do not state or translate the resolved status" in poster
+    assert "Summary` bullets verbatim" in poster
+    assert "rejects any summary file that differs" in poster
     assert "sole completion disposition deterministically" in poster.replace("\n", " ")
     assert "caller will disposition open findings" not in poster
     assert "--outcome-file" in poster

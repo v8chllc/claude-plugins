@@ -1,6 +1,6 @@
 ---
 name: consensus-review-poster
-description: Posts the consensus-review comment to a GitHub PR or GitLab MR. Writes the one-to-three bullet summary, renders the comment through the skill's post_review_comment.py, and reports the comment URL. Invoked by the consensus-review skill once per cycle. Do not invoke directly — requires the synthesized report and the cycle metadata the skill supplies.
+description: Posts the consensus-review comment to a GitHub PR or GitLab MR. Copies the synthesized summary, renders the comment through the skill's post_review_comment.py, and reports the comment URL. Invoked by the consensus-review skill once per cycle. Do not invoke directly — requires the synthesized report and the cycle metadata the skill supplies.
 tools: ["Bash", "Read", "Write"]
 model: sonnet
 color: magenta
@@ -38,22 +38,19 @@ alter the findings, the score, or the status.
 Find the `### Quality Score: N/100` heading. If it is missing, stop without
 posting and report that the report is incomplete. Post nothing in that case.
 
-## Step 2 — Write the summary
+## Step 2 — Copy the summary
 
-Write one to three markdown bullets to `{scratch-dir}/summary-{cycle:02d}.md`.
-Draw them from the report's Summary and Evidence sections, naming the most
-consequential finding and the evidence for it. Each bullet is one sentence
-under 120 characters, with no heading, code block, or long quote.
+Write the report's one to three `### Summary` bullets verbatim to
+`{scratch-dir}/summary-{cycle:02d}.md`, with no heading. The posting script
+rejects any summary file that differs from the synthesized report.
 
 Cite only repository-relative paths of tracked files, or links. Never an
 absolute path, a home-directory path, or an untracked scratch path — the people
 reading this comment have no checkout of your machine.
 
-Do not state or translate the resolved status, `completion_kind`, fix
-requirement, or follow-up disposition. The posting script renders the sole
-completion disposition deterministically. For a 95+ advisory result, the
-metadata status remains `passing`. Report the posted comment URL so the skill
-can return the exact review record.
+The posting script renders the sole completion disposition deterministically.
+For a 95+ advisory result, the metadata status remains `passing`. Report the
+posted comment URL so the skill can return the exact review record.
 
 ## Step 3 — Write the report file and post
 

@@ -27,6 +27,10 @@ Delegation: parallel-subagents. Plan: none.
 - **Files examined:** src/render.py
 - **Commands run:** uv run ruff check .
 
+### Summary
+
+- The HIGH finding leaves an empty table body in src/render.py.
+
 ### Must Fix
 
 #### [F-1] [HIGH] Empty row list renders a header with no body
@@ -197,11 +201,31 @@ def test_summary_rejects_the_wrong_shape(summary: str) -> None:
         module.validate_summary(summary)
 
 
-def test_summary_validation_preserves_poster_wording() -> None:
+def test_summary_validation_preserves_synthesizer_wording() -> None:
     module = load_post_review_comment()
     assert module.validate_summary("- Agent-authored finding summary.\n") == (
         "- Agent-authored finding summary."
     )
+
+
+def test_summary_file_must_match_the_synthesized_report() -> None:
+    module = load_post_review_comment()
+    outcome = module.resolve_review_outcome(
+        REPORT, score=90, status="passing", reviewed_sha="1a2b3c4"
+    )
+    with pytest.raises(module.ContractError, match="copy the report"):
+        module.build_comment_body(
+            report_text=REPORT,
+            summary_text="- No fixes are required.\n",
+            cycle=2,
+            outcome=outcome,
+            delegation_mode="parallel-subagents",
+            plan_source="none",
+            scope_basis="full-diff",
+            files_touched=3,
+            findings_opened=2,
+            findings_closed=1,
+        )
 
 
 def test_report_must_carry_merged_evidence() -> None:
@@ -263,6 +287,10 @@ def test_advisory_report_comment_and_terminal_signal_agree() -> None:
 
 - **Files examined:** src/render.py
 - **Commands run:** uv run pytest
+
+### Summary
+
+- [F-1] Preserve the payload remains open at MEDIUM severity.
 
 ### Must Fix
 
@@ -423,7 +451,7 @@ def test_status_icons(
     )
     body = module.build_comment_body(
         report_text=report,
-        summary_text="- Findings and supporting evidence are included below.",
+        summary_text=SUMMARY,
         cycle=1,
         outcome=outcome,
         delegation_mode="parallel-subagents",

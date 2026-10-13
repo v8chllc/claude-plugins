@@ -9,7 +9,7 @@
 Reads the platform from ``DEV_SEC_OPS_PLATFORM`` or ``--platform``, validates
 every schema-v2 field against ``review_contract``, renders
 ``templates/review-comment.md.tmpl``, and posts the result with ``gh`` or
-``glab``. Status and summary authorship stay with the calling role; this script
+``glab``. Status and summary authorship stay with the synthesizer; this script
 owns validation, deterministic rendering, and transport.
 
 Byte-identical to the Codex copy in ``v8chllc/codex-plugins`` apart from this
@@ -50,6 +50,7 @@ STATUS_EMOJI = {
 
 TEMPLATE_NAME = "review-comment.md.tmpl"
 EVIDENCE_HEADING = "### Evidence"
+SUMMARY_HEADING = "### Summary"
 MIN_SUMMARY_BULLETS = 1
 MAX_SUMMARY_BULLETS = 3
 
@@ -95,7 +96,7 @@ def read_required_text(path: str | Path, *, label: str) -> str:
 
 
 def validate_summary(summary_text: str) -> str:
-    """Validate the one-to-three bullet summary authored by the poster role."""
+    """Validate a one-to-three bullet synthesized summary."""
     lines = [line.strip() for line in summary_text.splitlines() if line.strip()]
     if not all(line.startswith("- ") for line in lines):
         raise ContractError("Every summary line must be a markdown bullet ('- ').")
@@ -107,11 +108,43 @@ def validate_summary(summary_text: str) -> str:
     return "\n".join(lines)
 
 
+def extract_report_summary(report_text: str) -> str:
+    """Extract and validate the synthesized report's Summary section."""
+    lines = report_text.splitlines()
+    try:
+        heading_index = lines.index(SUMMARY_HEADING)
+    except ValueError as error:
+        raise ContractError(
+            "The report is missing its '### Summary' section."
+        ) from error
+
+    section_lines: list[str] = []
+    for line in lines[heading_index + 1 :]:
+        if line.startswith("### "):
+            break
+        section_lines.append(line)
+    report_summary = "\n".join(section_lines).strip()
+    validate_summary(report_summary)
+    return report_summary
+
+
+def validate_summary_copy(report_text: str, summary_text: str) -> str:
+    """Require the poster's summary file to preserve the synthesized summary."""
+    report_summary = extract_report_summary(report_text)
+    validate_summary(summary_text)
+    if summary_text.strip() != report_summary:
+        raise ContractError(
+            "The summary file must copy the report's '### Summary' bullets verbatim."
+        )
+    return report_summary
+
+
 def render_summary(summary_text: str, *, completion_kind: str) -> str:
-    """Render authoritative completion state above the poster-authored summary."""
+    """Render authoritative completion state above the synthesized summary."""
+    validate_summary(summary_text)
     return (
         f"**Resolved completion:** {COMPLETION_NOTICES[completion_kind]}\n\n"
-        f"{validate_summary(summary_text)}"
+        f"{summary_text}"
     )
 
 
@@ -170,6 +203,7 @@ def build_comment_body(
 ) -> str:
     """Build the full review comment, metadata block first."""
     validate_report(report_text)
+    summary_text = validate_summary_copy(report_text, summary_text)
     resolved = resolve_review_outcome(
         report_text,
         score=outcome.score,

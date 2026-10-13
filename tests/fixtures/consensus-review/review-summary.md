@@ -1,1 +1,1 @@
-- Review passed with a score of 85/100. A fix cycle will address the open findings.
+- One HIGH finding on the render path and one MEDIUM standards gap.

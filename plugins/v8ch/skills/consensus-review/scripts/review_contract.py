@@ -20,7 +20,7 @@ import argparse
 import json
 import re
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -620,6 +620,26 @@ def completion_signal(
     return None
 
 
+def dispatch_after_post(
+    outcome: ReviewOutcome,
+    *,
+    cycle: int,
+    review_url: str | None,
+    post_succeeded: bool,
+    invoke_fixer: Callable[[], None],
+) -> dict[str, Any] | None:
+    """Return a terminal signal or invoke the fixer for a repairable outcome."""
+    signal = completion_signal(
+        outcome,
+        cycle=cycle,
+        review_url=review_url,
+        post_succeeded=post_succeeded,
+    )
+    if signal is None:
+        invoke_fixer()
+    return signal
+
+
 def _require_int(value: object, *, key: str, minimum: int, maximum: int | None) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ContractError(f"Metadata '{key}' must be an integer, got {value!r}.")
@@ -853,11 +873,12 @@ def main(argv: list[str] | None = None) -> int:
             write_json(args.output, serialize_outcome(outcome))
         else:
             outcome = read_outcome(args.outcome_file)
-            signal = completion_signal(
+            signal = dispatch_after_post(
                 outcome,
                 cycle=args.cycle,
                 review_url=args.review_url,
                 post_succeeded=not args.post_failed,
+                invoke_fixer=lambda: None,
             )
             write_json(args.output, signal)
     except (ContractError, OSError) as error:

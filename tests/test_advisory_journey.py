@@ -1,6 +1,5 @@
 """Exercise the posted advisory route through its three executable boundaries."""
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -89,10 +88,9 @@ def test_advisory_journey_posts_once_and_returns_full_signal_without_fixer(
     report_path = tmp_path / "report.md"
     outcome_path = tmp_path / "outcome.json"
     summary_path = tmp_path / "summary.md"
-    signal_path = tmp_path / "signal.json"
     report_path.write_text(report, encoding="utf-8")
     summary_path.write_text(
-        "- F-1 has a demonstrated cost in src/widget.py.\n", encoding="utf-8"
+        "- Open findings affect widget behavior.\n", encoding="utf-8"
     )
 
     subprocess.run(
@@ -169,23 +167,14 @@ def test_advisory_journey_posts_once_and_returns_full_signal_without_fixer(
     assert "Complete with advisory findings for caller disposition." in posted_body
     assert report.strip() in posted_body
 
-    subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPTS_DIR / "review_contract.py"),
-            "signal",
-            "--outcome-file",
-            str(outcome_path),
-            "--cycle",
-            str(cycle),
-            "--review-url",
-            REVIEW_URL,
-            "--output",
-            str(signal_path),
-        ],
-        check=True,
+    fixer_calls: list[str] = []
+    signal = contract.dispatch_after_post(
+        outcome,
+        cycle=cycle,
+        review_url=REVIEW_URL,
+        post_succeeded=True,
+        invoke_fixer=lambda: fixer_calls.append("fix"),
     )
-    signal = json.loads(signal_path.read_text(encoding="utf-8"))
     assert signal == {
         "signal": "REVIEW_COMPLETE_WITH_FINDINGS",
         "cycle": cycle,
@@ -197,9 +186,6 @@ def test_advisory_journey_posts_once_and_returns_full_signal_without_fixer(
             "open_findings": list(outcome.findings),
         },
     }
-    fixer_calls: list[str] = []
-    if signal is None:
-        fixer_calls.append("fix")
     assert fixer_calls == []
     # The skill routes a non-null completion signal directly to its stop rule.
     skill = (CONSENSUS_REVIEW_DIR / "SKILL.md").read_text(encoding="utf-8")
