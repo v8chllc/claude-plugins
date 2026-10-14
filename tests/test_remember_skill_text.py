@@ -195,6 +195,16 @@ def test_remember_recommendations_carry_supported_evidence(heading: str) -> None
     assert "Do not present an unrun command as a result" in section
 
 
+def test_recommend_session_cites_existing_journal_write_steps() -> None:
+    prerequisite = normalized(
+        workflow_step_block("## Workflow G: Recommend Session", "2")
+    )
+    assert "Workflow E steps 2–5" in prerequisite
+    for number in range(2, 6):
+        workflow_step_block("## Workflow E: Journal Write", str(number))
+    assert not re.search(r"(?m)^6\. ", workflow_block("## Workflow E: Journal Write"))
+
+
 @pytest.mark.parametrize(
     "heading",
     ("## Workflow E: Recommend Curated", "## Workflow F: Recommend Session"),

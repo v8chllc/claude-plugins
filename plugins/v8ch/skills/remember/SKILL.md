@@ -364,7 +364,7 @@ Invoked by the `recommend` skill (`/recommend session`).
 
 1. **Guard**: check `.remember/MEMORY.md` and `.remember/memory/` exist. If
    either is missing, tell the user to run `/remember setup` first.
-2. Run journal write logic (Workflow E steps 2–6) as a prerequisite. If already captured (dedupe), skip silently and continue.
+2. Run journal write logic (Workflow E steps 2–5) as a prerequisite. If already captured (dedupe), skip silently and continue.
 3. Review the captured journal entry and full session context.
 4. Identify curated candidates (entity, decision, error, preference) and procedural candidates (workflow lessons, coding/arch standards, skill/tool routines).
 5. Resolve each procedural candidate to an approved target from `references/procedural-targets.md`. If no target fits, mark as unsupported.
