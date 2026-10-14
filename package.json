@@ -17,6 +17,9 @@
   "author": "",
   "license": "MIT",
   "type": "commonjs",
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
   "bugs": {
     "url": "https://github.com/v8chllc/claude-plugins/issues"
   },
