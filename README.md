@@ -12,6 +12,12 @@ Plugin, skill, and agent assets for Claude/Codex workflows.
 
 ## Development
 
+Use mise as the tool-version manager. Install the selected Node version first:
+
+```sh
+mise install
+```
+
 Install the repository-managed dependencies before running checks:
 
 ```sh
