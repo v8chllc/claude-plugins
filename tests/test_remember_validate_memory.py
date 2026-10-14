@@ -133,6 +133,38 @@ def test_valid_memory_json_output_passes(tmp_path: Path) -> None:
     assert payload["issues"] == []
 
 
+def test_missing_journal_lane_suggests_claude_setup(tmp_path: Path) -> None:
+    write_valid_memory(tmp_path)
+    journal_dir = tmp_path / ".remember" / "memory"
+    (journal_dir / "2026-07-03.md").unlink()
+    journal_dir.rmdir()
+
+    result = run_validate(tmp_path, "--json")
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    journal_issue = next(
+        issue for issue in payload["issues"] if issue["code"] == "journal_dir_missing"
+    )
+    assert journal_issue["suggested_fix"] == (
+        "Run /remember setup to create the journal lane."
+    )
+
+
+def test_setup_suggestions_use_claude_syntax(tmp_path: Path) -> None:
+    result = run_validate(tmp_path, "--json")
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    memory_issue = next(
+        issue for issue in payload["issues"] if issue["code"] == "memory_file_missing"
+    )
+    assert memory_issue["suggested_fix"] == (
+        "Run /remember setup before validating or writing memory."
+    )
+    assert "$remember" not in SCRIPT.read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize("kind", ("decision", "error"))
 def test_evidence_url_with_colons_validates_and_parses_intact(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str

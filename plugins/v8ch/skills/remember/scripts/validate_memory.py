@@ -114,7 +114,7 @@ def validate_memory_file(root: Path, issues: list[Issue]) -> None:
             "journal_dir_missing",
             journal_dir,
             "Memory is partially initialized; .remember/memory/ is missing.",
-            "Run $remember setup to create the journal lane.",
+            "Run /remember setup to create the journal lane.",
         )
 
     text = memory_path.read_text(encoding="utf-8")
