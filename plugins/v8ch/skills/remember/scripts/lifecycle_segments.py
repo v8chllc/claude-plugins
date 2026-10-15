@@ -4,8 +4,8 @@
 The store is a single flat directory, ``.remember/turns/``, shared by every
 toolchain that captures lifecycle segments.  Records are ``version: 3`` JSON
 objects named ``{platform}-{kind}-{key}.json``; ``platform`` is a record field,
-never a directory.  This module is the sole authority on the v3 schema: capture,
-validation, and CLI paths all read it from here.
+never a directory. The shared ``memory/scripts/segment_format.py`` owns the
+v3 parser used by validation and this lifecycle CLI.
 
 There is no reader for any earlier format.  A file that is not a valid v3
 record is skipped as malformed: never parsed, never stamped, never deleted.
@@ -16,37 +16,34 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
+import sys
 import tempfile
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SEGMENT_VERSION = 3
-PLATFORM = "claude"
-SEGMENT_PLATFORMS = ("claude", "codex")
-STOP_KIND = "stop"
-SESSION_END_KIND = "session-end"
-SEGMENT_KINDS = (STOP_KIND, SESSION_END_KIND)
-SEGMENT_FIELDS = frozenset(
-    {
-        "version",
-        "platform",
-        "kind",
-        "key",
-        "project_root",
-        "session_id",
-        "captured_at",
-        "text",
-        "reason",
-        "transcript_path",
-        "summarized_at",
-        "summary_path",
-    }
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "memory" / "scripts"))
+from segment_format import (  # noqa: E402
+    SEGMENT_FIELDS as SEGMENT_FIELDS,
 )
-TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
-TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$")
+from segment_format import (
+    SEGMENT_PLATFORMS,
+    TIMESTAMP_FORMAT,
+    summary_target,
+    valid_segment,
+)
+from segment_format import (
+    TIMESTAMP_RE as TIMESTAMP_RE,
+)
+from segment_format import (
+    segment_filename as segment_filename,
+)
+from segment_format import (
+    summary_inside_memory as summary_inside_memory,
+)
+
+PLATFORM = "claude"
 
 
 def now_stamp() -> str:
@@ -56,80 +53,6 @@ def now_stamp() -> str:
 
 def turns_dir(root: Path) -> Path:
     return root / ".remember" / "turns"
-
-
-def segment_filename(platform: str, kind: str, key: str) -> str:
-    return f"{platform}-{kind}-{key}.json"
-
-
-def memory_dir(root: Path) -> Path:
-    return root / ".remember" / "memory"
-
-
-def summary_inside_memory(root: Path, value: str) -> bool:
-    """Return whether ``value`` is a relative path inside ``.remember/memory``."""
-    path = Path(value)
-    if path.is_absolute():
-        return False
-    return (root / path).resolve().parent == memory_dir(root).resolve()
-
-
-def summary_target(root: Path, value: str) -> Path | None:
-    """Return the existing journal file named by ``value``, or ``None``."""
-    if not summary_inside_memory(root, value):
-        return None
-    target = (root / Path(value)).resolve()
-    return target if target.is_file() else None
-
-
-def _nonempty_str(value: Any) -> bool:
-    return isinstance(value, str) and bool(value)
-
-
-def valid_segment(root: Path, path: Path, record: Any) -> bool:
-    """Return whether ``record`` is a v3 segment belonging to ``root``."""
-    if not isinstance(record, dict) or set(record) != SEGMENT_FIELDS:
-        return False
-    if record["version"] != SEGMENT_VERSION:
-        return False
-    platform = record["platform"]
-    kind = record["kind"]
-    key = record["key"]
-    if platform not in SEGMENT_PLATFORMS or kind not in SEGMENT_KINDS:
-        return False
-    if not _nonempty_str(key):
-        return False
-    if path.name != segment_filename(platform, kind, key):
-        return False
-    if not _nonempty_str(record["session_id"]):
-        return False
-    if record["project_root"] != str(root.resolve()):
-        return False
-    if not isinstance(record["captured_at"], str) or not TIMESTAMP_RE.match(
-        record["captured_at"]
-    ):
-        return False
-    if not isinstance(record["text"], str):
-        return False
-    reason = record["reason"]
-    if kind == STOP_KIND:
-        if reason is not None:
-            return False
-    elif not _nonempty_str(reason):
-        return False
-    transcript = record["transcript_path"]
-    if transcript is not None and not _nonempty_str(transcript):
-        return False
-    summarized = record["summarized_at"]
-    summary = record["summary_path"]
-    if summarized is None and summary is None:
-        return True
-    # Pairing rule: both set or both null; anything else is rejected, not repaired.
-    if not _nonempty_str(summarized) or not _nonempty_str(summary):
-        return False
-    if not TIMESTAMP_RE.match(summarized):
-        return False
-    return summary_inside_memory(root, summary)
 
 
 def read_segments(root: Path) -> list[tuple[Path, dict[str, Any]]]:

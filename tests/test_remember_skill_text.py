@@ -11,8 +11,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_DIR = REPO_ROOT / "plugins/v8ch/skills"
 REMEMBER_DIR = SKILLS_DIR / "remember"
-TYPES_PATH = REMEMBER_DIR / "references/types.md"
-VALIDATOR_PATH = REMEMBER_DIR / "scripts/validate_memory.py"
+MEMORY_DIR = REPO_ROOT / "plugins/v8ch/memory"
+TYPES_PATH = MEMORY_DIR / "references/types.md"
+VALIDATOR_PATH = MEMORY_DIR / "scripts/validate_memory.py"
 LEGACY_DIRECTIVE = REMEMBER_DIR / "references/claude-md-directive.md"
 REVIEW_HEADING = "## Workflow J: Review"
 PROCEDURAL_WRITE = "Workflow I"
@@ -38,6 +39,7 @@ def memory_skill_assets() -> list[Path]:
     assets = [
         *(SKILLS_DIR / "remember").rglob("*.md"),
         *(SKILLS_DIR / "recommend").rglob("*.md"),
+        *(MEMORY_DIR / "references").rglob("*.md"),
     ]
     return sorted(path for path in assets if path != LEGACY_DIRECTIVE)
 
@@ -174,35 +176,12 @@ def test_typed_recording_captures_and_rechecks_optional_evidence() -> None:
     )
     assert "Missing evidence does not block an otherwise valid entry" in section
     assert "never invent a source" in section
-    assert "keep existing `Evidence` only while it supports" in section
-    assert "Evidence source and untrusted-data contract" in section
-    assert "Do not present an unrun command as a result" in section
-
-
-@pytest.mark.parametrize(
-    "heading",
-    ("## Workflow F: Recommend Curated", "## Workflow G: Recommend Session"),
-)
-def test_remember_recommendations_carry_supported_evidence(heading: str) -> None:
-    section = normalized(workflow_block(heading))
-
-    assert "For decision and error adds or updates" in section
-    assert "optional `Evidence`" in section
-    assert "omit it when" in section.lower()
-    assert "invent" in section
-    assert "existing evidence" in section
-    assert "Evidence source and untrusted-data contract" in section
-    assert "Do not present an unrun command as a result" in section
-
-
-def test_recommend_session_cites_existing_journal_write_steps() -> None:
-    prerequisite = normalized(
-        workflow_step_block("## Workflow G: Recommend Session", "2")
+    assert "evidence retention" in section
+    assert "keep existing `Evidence` only while it supports" in normalized(
+        (MEMORY_DIR / "references/recording.md").read_text(encoding="utf-8")
     )
-    assert "Workflow E steps 2–5" in prerequisite
-    for number in range(2, 6):
-        workflow_step_block("## Workflow E: Journal Write", str(number))
-    assert not re.search(r"(?m)^6\. ", workflow_block("## Workflow E: Journal Write"))
+    assert "Evidence source and untrusted-data contract" in section
+    assert "Do not present an unrun command as a result" in section
 
 
 @pytest.mark.parametrize(
@@ -247,7 +226,7 @@ def test_legacy_directive_is_still_shipped() -> None:
 @pytest.mark.parametrize(
     "asset",
     memory_skill_assets(),
-    ids=lambda path: str(path.relative_to(SKILLS_DIR)),
+    ids=lambda path: str(path.relative_to(REPO_ROOT / "plugins/v8ch")),
 )
 def test_memory_skill_text_has_no_local_context_lane(asset: Path) -> None:
     text = asset.read_text(encoding="utf-8")
@@ -454,12 +433,12 @@ def load_validator(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     spec = importlib.util.spec_from_file_location("validate_memory", VALIDATOR_PATH)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
-    # The Claude validator imports lifecycle_segments from its own directory.
+    # The shared validator imports segment_format from its own directory.
     monkeypatch.syspath_prepend(str(VALIDATOR_PATH.parent))
     # delitem records nothing for an absent key, so setitem first records the
     # current entry, or its absence, for pytest to restore after the load.
-    monkeypatch.setitem(sys.modules, "lifecycle_segments", ModuleType("placeholder"))
-    monkeypatch.delitem(sys.modules, "lifecycle_segments")
+    monkeypatch.setitem(sys.modules, "segment_format", ModuleType("placeholder"))
+    monkeypatch.delitem(sys.modules, "segment_format")
     monkeypatch.setitem(sys.modules, spec.name, module)
     spec.loader.exec_module(module)
     return module
@@ -487,11 +466,11 @@ def test_validator_load_restores_sys_modules_and_sys_path(
     monkeypatch: pytest.MonkeyPatch, preloaded: bool
 ) -> None:
     # The outer monkeypatch sets the starting state and cleans up after it.
-    sibling = ModuleType("lifecycle_segments")
-    monkeypatch.setitem(sys.modules, "lifecycle_segments", sibling)
+    sibling = ModuleType("segment_format")
+    monkeypatch.setitem(sys.modules, "segment_format", sibling)
     if not preloaded:
-        monkeypatch.delitem(sys.modules, "lifecycle_segments")
-    names = ("validate_memory", "lifecycle_segments")
+        monkeypatch.delitem(sys.modules, "segment_format")
+    names = ("validate_memory", "segment_format")
     saved = {name: sys.modules.get(name) for name in names}
     path = list(sys.path)
     beside = modules_beside_validator()
