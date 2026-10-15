@@ -32,7 +32,8 @@ their respective formats and allowable targets.
 ## Procedural target write
 
 1. Resolve the target through `procedural-targets.md`; reject unsupported
-   targets and do not write them without explicit user direction.
+   targets. Ask for user direction when none fits, and do not write outside the
+   approved target set.
 2. Read existing target guidance. Skip a duplicate rule, update a partially
    covered rule in place, or add a concise new rule.
 3. Present the patch for approval. Create a missing allowed target only after
