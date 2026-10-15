@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from lifecycle_segments import valid_segment
+from segment_format import valid_segment
 
 MEMORY_TYPES = ("entity", "decision", "error", "preference", "todo")
 REQUIRED_FIELDS = {

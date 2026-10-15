@@ -48,7 +48,7 @@ def test_hardcoded_skill_scripts_are_rejected(command: str) -> None:
     "command",
     [
         "uv run ${CLAUDE_SKILL_DIR}/scripts/recover_context.py 7",
-        "python ${CLAUDE_PLUGIN_ROOT}/skills/remember/scripts/validate_memory.py",
+        "python ${CLAUDE_PLUGIN_ROOT}/memory/scripts/validate_memory.py",
     ],
 )
 def test_claude_plugin_path_substitutions_are_permitted(command: str) -> None:
@@ -59,10 +59,9 @@ def test_memory_skills_use_installed_plugin_paths_for_validation() -> None:
     remember = (PLUGIN_DIR / "skills/remember/SKILL.md").read_text(encoding="utf-8")
     recommend = (PLUGIN_DIR / "skills/recommend/SKILL.md").read_text(encoding="utf-8")
 
-    assert remember.count("${CLAUDE_SKILL_DIR}/scripts/validate_memory.py") == 8
     assert (
-        recommend.count(
-            "${CLAUDE_PLUGIN_ROOT}/skills/remember/scripts/validate_memory.py"
-        )
-        == 3
+        remember.count("${CLAUDE_PLUGIN_ROOT}/memory/scripts/validate_memory.py") == 5
+    )
+    assert (
+        recommend.count("${CLAUDE_PLUGIN_ROOT}/memory/scripts/validate_memory.py") == 3
     )
