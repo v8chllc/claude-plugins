@@ -52,6 +52,16 @@ def test_demonstrated_severe_failure_and_independent_defects_stay_ranked() -> No
         assert clause in rule
 
 
+def test_plan_notes_summary_preserves_sponsor_decision_precedence() -> None:
+    """Prevent the generic defect rule from scoring rejected alternatives."""
+    rule = classification_rule()
+    assert "plus sponsor-decision contradictions routed here by the rule above" in rule
+    assert "For a sponsor-decision contradiction, rank only" in rule
+    assert "a demonstrated CRITICAL or HIGH failure or an independent defect" in rule
+    assert "contradicted part remains an unscored Plan Note" in rule
+    assert "A divergence that also causes a defect is ranked" not in rule
+
+
 def test_missing_and_malformed_sections_use_none_default() -> None:
     """Require the missing-section default and one malformed-section note."""
     rule = classification_rule()
