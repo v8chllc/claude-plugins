@@ -109,9 +109,12 @@ Place each finding in exactly one section:
 - **Latent Findings** — safe today only because an invariant elsewhere holds.
   Name the invariant, where it is enforced, and the failure that follows if it
   moves. A latent finding takes the severity of its would-be failure.
-- **Plan Notes** — divergences from the supplied plan that cause no defect.
-  No severity tag, no deduction. A divergence that also causes a defect is
-  ranked as that defect, with the plan context attached to it.
+- **Plan Notes** — divergences from the supplied plan that cause no defect,
+  plus sponsor-decision contradictions routed here by the rule above. No
+  severity tag, no deduction. Rank an ordinary plan divergence that causes a
+  defect with its plan context. For a sponsor-decision contradiction, rank only
+  a demonstrated CRITICAL or HIGH failure or an independent defect; the
+  contradicted part remains an unscored Plan Note.
 
 Number findings `[F-1]`, `[F-2]`, … sequentially across Must Fix, Should Fix,
 and Latent Findings, in that order. These numbers are quoted downstream and must
