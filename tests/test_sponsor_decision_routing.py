@@ -9,6 +9,7 @@ SYNTHESIZER = (
 
 
 def classification_rule() -> str:
+    """Return the synthesizer's classification instructions as searchable text."""
     text = SYNTHESIZER.read_text(encoding="utf-8")
     step_2 = text.index("## Step 2 — Deduplicate")
     step_3 = text.index("## Step 3 — Drop")
@@ -19,6 +20,7 @@ def classification_rule() -> str:
 
 
 def test_sponsor_decision_entries_route_rejected_fixes_to_unscored_notes() -> None:
+    """Require rejected fixes to become unnumbered, unscored Plan Notes."""
     rule = classification_rule()
     for clause in (
         "finding's proposed fix and failure statement",
@@ -35,6 +37,7 @@ def test_sponsor_decision_entries_route_rejected_fixes_to_unscored_notes() -> No
 
 
 def test_demonstrated_severe_failure_and_independent_defects_stay_ranked() -> None:
+    """Keep demonstrated severe failures and independent defects ranked."""
     rule = classification_rule()
     for clause in (
         "demonstrated CRITICAL or",
@@ -50,6 +53,7 @@ def test_demonstrated_severe_failure_and_independent_defects_stay_ranked() -> No
 
 
 def test_missing_and_malformed_sections_use_none_default() -> None:
+    """Require the missing-section default and one malformed-section note."""
     rule = classification_rule()
     for clause in (
         "A missing section is `None.`",

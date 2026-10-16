@@ -25,6 +25,7 @@ def parse_frontmatter(path: Path) -> dict[str, Any]:
 
 
 def test_marketplace_points_to_valid_plugin_manifest() -> None:
+    """Check the marketplace target, manifest metadata, and release version."""
     marketplace = load_json(MARKETPLACE_PATH)
 
     assert marketplace["name"] == "v8ch"
