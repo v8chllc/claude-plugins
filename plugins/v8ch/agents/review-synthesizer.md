@@ -74,6 +74,33 @@ Remove, before classifying:
 
 ## Step 4 — Classify what remains
 
+When a plan is supplied, read the section whose full heading line is
+`### Sponsor decisions` before classifying the findings that survived Step 3.
+A missing section is `None.`.
+The section body must be either the single line `None.` or consecutive
+top-level entries beginning `- **D-<n>:** `, with positive decimal numbers
+starting at 1 and increasing without gaps or leading zeroes. Each entry has
+decision text followed by zero or more two-space-indented
+`  - Rejected: <alternative>` lines and exactly one
+`  - Source: <URL>` line, in that order, where `<URL>` starts with
+`https://github.com/` and identifies the issue body or comment. If there is more
+than one `### Sponsor decisions` heading or the section does not parse this
+way, treat all its entries as `None.` and add exactly one Plan Note titled
+`Unparseable sponsor decisions section`, with a 0 deduction. Do not infer
+decisions from issue history or other plan prose.
+
+Compare each surviving finding's proposed fix and failure statement with every
+parsed `D-<n>` entry. If its fix would implement a `Rejected:` alternative or
+reverse the decision text, route that contradiction to Plan Notes. Cite every
+matching `D-<n>` in `**Plan reference:**`; give the note no severity tag, no
+`[F-N]` number, and a 0 deduction. A finding with a demonstrated CRITICAL or
+HIGH failure is the exception: keep the defect in Must Fix, cite the matching
+`D-<n>` as plan context, and send it to the fixer as an ordinary finding. When
+only part of a finding contradicts a decision, split out that part for Plan
+Notes and rank any independent defect normally. Cite both entries when decisions
+conflict; do not resolve the conflict. Classify a finding that matches no entry
+exactly as before.
+
 Severity is the consequence if the finding is true, as the reviewer graded it.
 Place each finding in exactly one section:
 
