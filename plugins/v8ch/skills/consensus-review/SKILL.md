@@ -81,11 +81,11 @@ project-level agent sharing a bare name is never selected:
 | Posting | `v8ch:consensus-review-poster` |
 | Fixing | `v8ch:consensus-review-fixer` |
 
-Only the three reviewers are delegated, and they run as one parallel batch:
-their work is genuinely independent, and none of them reads another's output.
-Everything else in the run is yours. Record the delegation mode as
-`parallel-subagents`, or `sequential-fallback` if the batch could not run in
-parallel and you ran the reviewers one at a time instead.
+The three reviewers run as one parallel batch: their work is genuinely
+independent, and none of them reads another's output. Invoke the synthesizer,
+poster, and fixer each as a single agent at the step that uses them. Record the
+delegation mode as `parallel-subagents`, or `sequential-fallback` if the batch
+could not run in parallel and you ran the reviewers one at a time instead.
 
 Pass each role the absolute skill directory, `${CLAUDE_SKILL_DIR}`, in its
 prompt. Agents do not receive skill variables.
@@ -164,9 +164,12 @@ prompt. Agents do not receive skill variables.
      report, the PR/MR number, the cycle, the status, the score, the delegation
      mode, the plan source, the reviewed SHA, the scope basis, the blast-radius
      counts, the repository directory, `${CLAUDE_SKILL_DIR}`, and a scratch
-     directory. Capture the comment URL. If posting fails, emit `ABORT` with
-     `reason` `post_failed` and stop. A completion signal requires a successfully
-     posted comment.
+     directory. Hand over the scope basis exactly as `recover_context.py`
+     printed it in `RECOVERED_CONTEXT` and the reviewed SHA exactly as
+     `git rev-parse HEAD` printed it in step 3: do not reformat, abbreviate, or
+     add characters to either value. Capture the comment URL. If posting fails,
+     emit `ABORT` with `reason` `post_failed` and stop. A completion signal
+     requires a successfully posted comment.
 
 9. **Resolve advisory routing, then branch on the result.** After every
    successful poster call, run:

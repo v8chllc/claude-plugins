@@ -21,9 +21,10 @@ alter the findings, the score, or the status.
 
 - **Report** — the synthesizer's output in full.
 - **PR/MR number**, **cycle**, **status**, **score**.
-- **Delegation mode** — `parallel-subagents` or `sequential-fallback`.
-- **Plan source** — the literal `none`, or `supplied: <path or short
-  description>`, identical to the report's Run Provenance line.
+- **Delegation mode and plan source** — read both from the report's
+  `### Run Provenance` line. Copy the `Delegation:` and `Plan:` values exactly
+  into `--delegation-mode` and `--plan-source`, respectively; do not take them
+  from the values in the invoking prompt.
 - **Reviewed SHA** — the HEAD SHA that was reviewed.
 - **Scope basis** — `full-diff` or `delta-since:<sha>`.
 - **Blast radius** — `files_touched`, `findings_opened`, `findings_closed`.
