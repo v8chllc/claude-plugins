@@ -28,8 +28,9 @@ which layers this project recognizes, which directions dependencies are allowed
 to run, and which duplication it has already accepted.
 
 Where no document states a rule, derive the boundary from the code around the
-change and say so in the finding. A stated rule or a concrete maintenance cost
-is a valid basis for a finding; a preference with neither is not.
+change and say so in the observation. A stated rule or a concrete maintenance
+cost can support an observation; report it as a finding only when its
+demonstrated consequence meets the finding bound in Step 2.
 
 List every document you read under `Files examined`.
 
@@ -56,8 +57,9 @@ Work through, for each change:
   imports, a configuration key nothing reads, a compatibility shim whose other
   side is gone.
 - **Duplication with a concrete maintenance cost** — name the copies and the
-  change that would have to be made in all of them. Duplication with no such
-  cost is not a finding.
+  change that would have to be made in all of them. Report it as a finding only
+  when its demonstrated consequence meets the finding bound below; otherwise
+  put the observation in Noted.
 - **Prompt assets** — judge a changed skill, agent, or prompt file against the
   published prompting guidance for the model it targets, not the toolchain this
   review runs on. Structure, one statement of each rule, explicit stop
@@ -83,8 +85,9 @@ Skip these changed files and report nothing about their contents:
   change in the same diff, and report only a mismatch.
 
 Vendored dependencies, build output, and caches are normally gitignored and so
-absent from a diff. When one does appear, that is itself worth a single finding
-— committed build output or committed dependencies — not a line-by-line review.
+absent from a diff. When one does appear, consider it one observation — committed
+build output or dependencies — rather than a line-by-line review. Apply the
+finding bound to decide whether it is a finding or Noted.
 
 ## Severity
 

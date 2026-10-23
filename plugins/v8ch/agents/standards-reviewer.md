@@ -92,8 +92,9 @@ Skip these changed files and report nothing about their contents:
   change in the same diff, and report only a mismatch.
 
 Vendored dependencies, build output, and caches are normally gitignored and so
-absent from a diff. When one does appear, that is itself worth a single finding
-— committed build output or committed dependencies — not a line-by-line review.
+absent from a diff. When one does appear, consider it one observation — committed
+build output or dependencies — rather than a line-by-line review. Apply the
+finding bound to decide whether it is a finding or Noted.
 
 ## Severity
 
