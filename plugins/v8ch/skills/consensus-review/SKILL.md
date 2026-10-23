@@ -1,6 +1,6 @@
 ---
 name: consensus-review
-description: Runs an autonomous, evidence-gated consensus code review. Use when reviewing code changes, before pushing a PR, or as the review step in a development workflow. Runs three independent reviewers in parallel, synthesizes a consequence-ranked report with a 1-100 quality score, and posts one review comment per cycle to the PR or MR. On a PR or MR its executable contract selects advisory findings for caller disposition; other non-clean reviews enter a fix cycle, up to three reviews per invocation by default or one when the caller declares a single-cycle cap. Accepts an optional plan file as review context. Scope defaults to all local changes; also accepts a PR/MR number, a base commit SHA, a branch diff, or an explicit file list.
+description: Runs an autonomous, evidence-gated consensus code review. Use when reviewing code changes, before pushing a PR, or as the review step in a development workflow. Runs three independent reviewers in parallel, synthesizes a consequence-ranked report with a 1-100 quality score, and posts one review comment per cycle to the PR or MR. On a PR or MR its executable contract selects advisory findings for caller disposition; other non-clean reviews enter a fix cycle, up to three reviews per invocation by default or one when the caller declares a single-cycle cap. Accepts an optional plan, acceptance criteria, and Regression Guards as review context. Scope defaults to all local changes; also accepts a PR/MR number, a base commit SHA, a branch diff, or an explicit file list.
 ---
 
 # Consensus Review
@@ -17,7 +17,8 @@ branches. It ends with exactly one terminal signal.
 ## Success criteria
 
 - Three reviewer reports, each with a complete Evidence section.
-- One synthesized report carrying a score, a status, and numbered findings.
+- One synthesized report carrying a score, a status, numbered findings, and one
+  Noted list for observations outside the finding bound.
 - On a PR/MR: one posted review comment per cycle, with caller disposition for
   advisory findings or fix evidence in the fix commit body.
 - Exactly one fenced `consensus-review-signal` block as the last output.
@@ -28,9 +29,13 @@ branches. It ends with exactly one terminal signal.
    and the thread is the audit trail.
 2. **Plan file** (optional) — review context only. A plan never sets a severity
    and never deducts points.
-3. **Single-cycle cap** (optional, PR/MR only) — when the caller declares it,
+3. **Acceptance criteria and Regression Guards** (optional) — the caller may
+   supply the run's stated criteria and guards as text or file paths. Read file
+   inputs in full. When absent, use only criteria and guards explicitly stated
+   in the supplied review context; do not invent them.
+4. **Single-cycle cap** (optional, PR/MR only) — when the caller declares it,
    run at most one review in this invocation. Otherwise use the normal budget.
-4. **Scope** — resolved by the ladder below.
+5. **Scope** — resolved by the ladder below.
 
 ## Scope ladder
 
@@ -117,8 +122,13 @@ prompt. Agents do not receive skill variables.
 
 4. **Run the three reviewers in one parallel batch.** Issue all three calls in a
    single response. Give each one the diff, the changed-file context, the plan
-   when supplied, `RECOVERED_CONTEXT` when it exists, and
+   when supplied, the acceptance criteria and Regression Guards when supplied,
+   `RECOVERED_CONTEXT` when it exists, and
    `${CLAUDE_SKILL_DIR}`.
+
+   Reviewers flag only gaps affecting correctness, security, privacy or
+   authorization, a stated criterion or Regression Guard, or the plan. They
+   place every other observation in one Noted list without a severity or fix.
 
 5. **Apply the evidence gate.** A reviewer output without an `## Evidence`
    section carrying both `Files examined` and `Commands run`, each non-empty,
@@ -146,9 +156,9 @@ prompt. Agents do not receive skill variables.
    also told not to write, rather than relying on this check alone.
 
 7. **Synthesize.** Invoke `v8ch:review-synthesizer` with all three outputs
-   labeled in full, the delegation mode, the plan source, and
-   `RECOVERED_CONTEXT`. It decides the score and the status; you do not
-   recompute either. Repeat step 6 afterwards.
+   labeled in full, the delegation mode, the plan source, the acceptance
+   criteria and Regression Guards, and `RECOVERED_CONTEXT`. It decides the
+   score and the status; you do not recompute either. Repeat step 6 afterwards.
 
    The synthesizer applies the same evidence gate as step 5. If it returns
    `### Review Status: FAILED`, each reviewer it names failed its pass. Rerun

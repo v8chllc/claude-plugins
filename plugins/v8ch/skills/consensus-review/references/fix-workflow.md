@@ -16,6 +16,7 @@ no other skill is invoked.
 Invoke `v8ch:consensus-review-fixer` with:
 
 - the synthesized report for the current cycle;
+- the run's acceptance criteria, Regression Guards, and supplied plan;
 - `RECOVERED_CONTEXT`;
 - the cycle number;
 - the scratch directory for the fix log;

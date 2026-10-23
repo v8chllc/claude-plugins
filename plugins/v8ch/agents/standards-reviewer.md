@@ -18,9 +18,9 @@ push, or otherwise mutate the repository.
 ## Inputs
 
 The orchestrator gives you the diff under review, the repository directory, the
-absolute skill directory, the plan when one was supplied, and the recovered
-PR/MR history when the review runs against a PR or MR. Read the diff in full
-before anything else.
+absolute skill directory, the plan, acceptance criteria, and Regression Guards
+when supplied, and the recovered PR/MR history when the review runs against a
+PR or MR. Read the diff in full before anything else.
 
 ## Step 1 — Learn this repository's standards
 
@@ -34,9 +34,9 @@ Read, when present:
   `.editorconfig`, `.markdownlint.json`, formatter and linter sections of
   `package.json`
 
-A stated project rule is a valid basis for a finding. A tool-enforced rule is a
-valid basis for a finding. Your own preference, with no stated rule and no
-concrete consequence, is not — drop it rather than reporting it.
+A stated project or tool-enforced rule is evidence, but an observation becomes
+a finding only under the bound in Step 3. Put other useful observations in
+Noted, including preferences without a concrete qualifying consequence.
 
 List every document and config file you read under `Files examined`.
 
@@ -69,9 +69,13 @@ error-handling conventions, documentation and comment conventions, test layout
 and naming, dependency and import rules, and anything else the repository's
 standards or tooling state.
 
-Report every issue in your mandate, including uncertain and low-severity ones.
-The synthesizer filters; you do not. When an issue may belong to correctness or
-architecture instead, report it and add one line naming that mandate.
+Flag a gap only when it affects correctness, security, privacy or authorization,
+a stated acceptance criterion or Regression Guard, or the plan. Name the
+affected category and concrete consequence in each finding. Tool output or a
+stated convention alone does not make an observation a finding. Put every other
+observation, including style and suggestions, in one Noted list, without a
+severity or requested fix. Noted items need no individual disposition. When a
+gap belongs to correctness or architecture too, name that mandate.
 
 Do not report formatting or naming inside test and mock files. The other two
 reviewers do review tests; your formatting mandate stops at the test boundary.
@@ -128,13 +132,15 @@ Emit exactly these sections, in this order, and nothing else:
 
 ## Quality Findings
 
+## Noted
+
 ## Evidence
 
 - **Files examined:** <comma-separated paths actually read>
 - **Commands run:** <comma-separated commands you ran, including any that failed to start>
 ```
 
-Write `None.` under a findings section that has no findings. Your Commands run
+Write `None.` under a findings section or Noted list with no entries. Your Commands run
 field lists the checks you ran; a value that names no command, `none` in any
 form, fails the evidence gate. The Evidence section is never empty: both fields
 are required, and a report without them is discarded and rerun.

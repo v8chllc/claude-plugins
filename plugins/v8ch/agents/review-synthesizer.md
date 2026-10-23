@@ -19,6 +19,7 @@ You analyze and report. You never modify code and you never fix findings.
 - The delegation mode: `parallel-subagents` or `sequential-fallback`.
 - The plan source: the literal `none`, or `supplied: <path or short
   description>`.
+- The run's acceptance criteria and Regression Guards, when supplied.
 - The recovered PR/MR history, when the review runs against a PR or MR.
 
 ## Step 1 — Apply the evidence gate
@@ -66,11 +67,21 @@ Remove, before classifying:
 
 - duplicates already merged in Step 2;
 - findings that misread the code, checked against the code itself;
-- preferences with no stated rule and no concrete consequence;
+- preferences with no stated rule and no concrete consequence (move useful
+  observations to Noted);
 - findings the reviewer closed with `**No change required:**`;
 - findings that prior recovered context resolves — but only when the current
   code or an explicit current decision resolves them. History alone never
   suppresses a finding that current code still exhibits.
+
+Before scoring, enforce the finding bound yourself. Keep a finding only when
+its gap affects correctness, security, privacy or authorization, a stated
+acceptance criterion or Regression Guard, or the plan. Move every other
+observation to one Noted list, including observations reviewers mislabeled as
+findings. Deduplicate that list, but do not assign severities, finding IDs,
+deductions, or individual dispositions to it. Preserve useful observations
+from each reviewer's Noted list. Do not silently drop them merely because they
+fall outside the finding bound.
 
 ## Step 4 — Classify what remains
 
@@ -180,12 +191,16 @@ Delegation: <parallel-subagents | sequential-fallback>. Plan: <none | supplied: 
 
 ### Plan Notes
 
+### Noted
+
 ### Behavior Deltas
 
 ### Score Breakdown
 ```
 
-Write `None.` under any section with no entries.
+Write `None.` under any section with no entries. Noted contains one list of
+unscored observations, separate from findings and Plan Notes. Noted items need
+no individual disposition and are not fixed unless the sponsor asks.
 
 Findings in Must Fix, Should Fix, and Latent Findings take this shape:
 

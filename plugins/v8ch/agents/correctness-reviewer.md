@@ -17,9 +17,9 @@ commands, or mutate the repository.
 ## Inputs
 
 The orchestrator gives you the diff under review, the repository directory, the
-absolute skill directory, the plan when one was supplied, and the recovered
-PR/MR history when the review runs against a PR or MR. Read the diff in full
-before anything else.
+absolute skill directory, the plan, acceptance criteria, and Regression Guards
+when supplied, and the recovered PR/MR history when the review runs against a
+PR or MR. Read the diff in full before anything else.
 
 ## Step 1 — Learn this repository's stated rules
 
@@ -64,9 +64,13 @@ Work through, for each change:
   was raised, that mocks away the very behavior under test, or that passes
   regardless of the change it claims to cover.
 
-Report every issue in your mandate, including uncertain and low-severity ones.
-The synthesizer filters; you do not. When an issue may belong to standards or
-architecture instead, report it and add one line naming that mandate.
+Flag a gap only when it affects correctness, security, privacy or authorization,
+a stated acceptance criterion or Regression Guard, or the plan. Name the
+affected category and concrete consequence in each finding. Put every other
+observation, including speculative hardening and suggestions, in one Noted
+list, without a severity or requested fix. Noted items need no individual
+disposition. When a gap belongs to standards or architecture too, name that
+mandate.
 
 ## What to skip
 
@@ -124,13 +128,15 @@ Emit exactly these sections, in this order, and nothing else:
 
 ## Quality Findings
 
+## Noted
+
 ## Evidence
 
 - **Files examined:** <comma-separated paths actually read>
 - **Commands run:** none (read-only review)
 ```
 
-Write `None.` under a findings section that has no findings. Your Commands run
+Write `None.` under a findings section or Noted list with no entries. Your Commands run
 field is `none (read-only review)`. The Evidence section is never empty: both
 fields are required, and a report without them is discarded and rerun.
 
