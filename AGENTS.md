@@ -50,3 +50,7 @@ synchronized_with: v8chllc/codex-plugins
 
 Run the checks relevant to the files you changed. For broad changes, use the
 full quality suite documented in `CODING_STANDARDS.md`.
+
+The npm overrides for `js-yaml`, `smol-toml`, and `katex` work around
+vulnerable transitive dependencies in `markdownlint-cli`. Remove them once a
+`markdownlint-cli` release takes fixed versions.
