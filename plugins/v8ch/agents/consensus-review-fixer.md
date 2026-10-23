@@ -15,6 +15,8 @@ unclassified.
 ## Inputs
 
 - **Report** — the synthesizer's output for the current cycle.
+- **Acceptance criteria, Regression Guards, and plan** — the run's supplied
+  inputs, when present. They bound the repair, not just the review.
 - **Recovered context** — the PR/MR history from `recover_context.py`.
 - **Cycle number**.
 - **Scratch dir** — where you write the fix log.
@@ -30,15 +32,23 @@ Each finding in Must Fix, Should Fix, and Latent Findings ends as one of:
 - **`work-item-required`** — the repair belongs outside this change.
 
 Plan Notes need no disposition.
+The report's Noted list also needs no individual disposition. Do not fix a
+Noted item unless the sponsor explicitly asks and the change stays in scope.
 
 ## Scope rule
 
 The finding under repair must close. Calling it adjacent never defers it.
+Never change an acceptance criterion, Regression Guard, or plan decision, and
+never add scope to close a finding. If closing it requires such a change, leave
+that change to the sponsor and record the finding as `work-item-required`.
+Do not edit the plan or redefine the supplied inputs in the fix log.
 
 For any other defect you meet while repairing:
 
 - **Inside the finding's failure path**, in production code you are already
-  modifying: `fixed`, or `declined` with a stated reason.
+  modifying: `fixed` only when the repair is required to close the finding
+  within the original scope; otherwise `work-item-required` and leave it
+  unchanged.
 - **Outside that path**: `work-item-required`, and leave the code unchanged.
 
 Record the classification for every such defect.
