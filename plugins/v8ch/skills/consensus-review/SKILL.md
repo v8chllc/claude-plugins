@@ -1,6 +1,6 @@
 ---
 name: consensus-review
-description: Runs an autonomous, evidence-gated consensus code review. Use when reviewing code changes, before pushing a PR, or as the review step in a development workflow. Runs three independent reviewers in parallel, synthesizes a consequence-ranked report with a 1-100 quality score, and posts one review comment per cycle to the PR or MR. On a PR or MR its executable contract selects advisory findings for caller disposition; other non-clean reviews enter a fix cycle, up to three reviews per invocation by default or one when the caller declares a single-cycle cap. Accepts an optional plan, acceptance criteria, and Regression Guards as review context. Scope defaults to all local changes; also accepts a PR/MR number, a base commit SHA, a branch diff, or an explicit file list.
+description: Runs an autonomous, evidence-gated consensus code review. Use when reviewing code changes, before pushing a PR, or as the review step in a development workflow. Runs three independent reviewers in parallel, synthesizes a consequence-ranked report with a 1-100 quality score, and posts one review comment per cycle to the PR or MR. On a PR or MR its executable contract selects advisory findings for caller disposition; other non-clean reviews enter a fix cycle, up to three reviews per invocation by default or one when the caller declares a single-cycle cap. Accepts an optional plan, acceptance criteria, and Regression Guards as review context. Reviews a PR/MR number or URL, or locally the current branch's commits since it left the default branch.
 ---
 
 # Consensus Review
@@ -25,8 +25,9 @@ branches. It ends with exactly one terminal signal.
 
 ## Inputs
 
-1. **PR/MR number** (optional) — when present, the diff comes from the platform
-   and the thread is the audit trail.
+1. **PR/MR reference** (optional) — a PR/MR number or URL. When present, the diff
+   comes from the platform and the thread is the audit trail; ignore any other
+   scope argument.
 2. **Plan file** (optional) — review context only. A plan never sets a severity
    and never deducts points.
 3. **Acceptance criteria and Regression Guards** (optional) — the caller may
@@ -35,27 +36,49 @@ branches. It ends with exactly one terminal signal.
    in the supplied review context; do not invent them.
 4. **Single-cycle cap** (optional, PR/MR only) — when the caller declares it,
    run at most one review in this invocation. Otherwise use the normal budget.
-5. **Scope** — resolved by the ladder below.
+   A local review ignores a single-cycle cap or `review_budget: single_cycle`.
+5. **Scope** — resolved below. Without a PR/MR reference, the only accepted
+   inputs are the plan file and acceptance criteria and Regression Guards as
+   text or files, each identified as that input by the caller. Any other
+   argument is an unsupported scope argument, including a commit SHA, a branch
+   name or range, a list of paths, or a path not identified as an accepted input.
 
 ## Scope ladder
 
-Take the first match:
+There are two forms:
 
-1. **PR/MR number** — fetch with `gh pr diff <number>` or `glab mr diff
-   <number>`, reading `DEV_SEC_OPS_PLATFORM` from `.env` at the repository root.
-   Before anything else, confirm local `HEAD` equals the PR/MR head SHA. On a
-   mismatch, emit `ABORT` with `reason` `head_mismatch` and stop.
-2. **Base commit SHA** — `git diff <sha>`, plus `git ls-files --others
-   --exclude-standard`.
-3. **Branch diff** — the `git diff` range for that branch.
-4. **Explicit file list** — `git diff -- <paths>`.
-5. **Default** — `git diff HEAD`, plus `git ls-files --others
-   --exclude-standard`.
+1. **PR/MR reference** — a PR/MR number or URL. For a URL, extract its PR/MR
+   number and use that number wherever the workflow or its helpers require a
+   number. Fetch with `gh pr diff <number>` or `glab mr diff <number>`, reading
+   `DEV_SEC_OPS_PLATFORM` from `.env` at the repository root. Before anything
+   else, confirm local `HEAD` equals the PR/MR head SHA. On a mismatch, emit
+   `ABORT` with `reason` `head_mismatch` and stop. The PR/MR path otherwise
+   behaves as before.
+2. **Local review** — without a PR/MR reference, review only the current
+   branch's commits since it left the default branch. Before step 1 of the
+   workflow, run these checks in order and stop at the first match:
+   1. If an unsupported scope argument is present, emit `ABORT` with `reason`
+      `unsupported_scope`. Name the argument in `message` and state that a local
+      review always reviews the current branch's commits since it left the
+      default branch.
+   2. If `git status --porcelain=v1 --untracked-files=all` prints anything,
+      emit `ABORT` with `reason` `dirty_worktree`. State in `message` that the
+      working tree must be clean, with nothing untracked, and to commit or
+      stash first.
+   3. Resolve `origin/HEAD` without fetching; use local `main` only when
+      `origin/HEAD` does not resolve. If neither ref resolves, or `git merge-base
+      <ref> HEAD` finds no common commit, emit `ABORT` with `reason` `no_base`.
+      State in `message` that the default branch could not be resolved and to
+      fetch or set `origin/HEAD`.
+   4. Set `<base>` to `git merge-base <ref> HEAD` and review only `git diff
+      <base> HEAD`. If that diff is empty, emit `NO_DIFF`.
 
-For levels 2 and 5, read each untracked file in full and include its contents in
-the diff, labeled as a new file.
+Local scope excludes uncommitted changes and untracked files. Resolve the full
+40-character lowercase SHA of `<base>` and `HEAD`. State the range
+`<ref>@<base-sha>..HEAD@<head-sha>` in the report and in `details.scope` on
+local `NO_DIFF` and `REVIEW_COMPLETE` signals. On a PR/MR, `details` is unchanged.
 
-If the resolved scope is empty, emit `NO_DIFF` and stop.
+If the resolved PR/MR scope is empty, emit `NO_DIFF` and stop.
 
 ## Cycle scope
 
@@ -168,8 +191,9 @@ prompt. Agents do not receive skill variables.
    the failed pass names and stop, with no score.
 
 8. **Return or post.**
-   - **No PR/MR number:** return the report as-is, emit `REVIEW_COMPLETE` with
-     `review_url` `null`, and stop. A local review never fixes.
+   - **No PR/MR reference:** return the report as-is, emit `REVIEW_COMPLETE` with
+     `review_url` `null` and the resolved `details.scope`, and stop. A local
+     review never fixes.
    - **PR/MR number:** invoke `v8ch:consensus-review-poster` once with the
      report, the PR/MR number, the cycle, the status, the score, the delegation
      mode, the plan source, the reviewed SHA, the scope basis, the blast-radius
@@ -277,10 +301,10 @@ finish; it does not assert that a pushed fix was reviewed.
 
 | Signal | When | `details` keys |
 | --- | --- | --- |
-| `REVIEW_COMPLETE` | A local review returned its report, or a PR/MR review reached `clean` | `score`, `status`, `review_url` |
+| `REVIEW_COMPLETE` | A local review returned its report, or a PR/MR review reached `clean` | `score`, `status`, `review_url`; local only: `scope` |
 | `REVIEW_COMPLETE_WITH_FINDINGS` | The advisory helper returned `open_findings` after a successful PR/MR post; the caller must disposition each returned finding | `score`, `status`, `review_url`, `reviewed_sha`, `open_findings` |
 | `CAPPED_REVIEW_COMPLETE` | A caller-capped PR/MR invocation completed its one review and, for `passing` or `failing`, its normal fix workflow; no second review runs, including after proof or quality failure | `score`, `status`, `review_url`, `commit_shas`, `work_items`, `fixer_outcome`, `failed_commands`, `unproven_findings` |
-| `NO_DIFF` | Nothing to review | `scope` |
+| `NO_DIFF` | Nothing to review | `scope` (local: `<ref>@<base-sha>..HEAD@<head-sha>`; PR/MR unchanged) |
 | `EVIDENCE_FAILED` | A reviewer failed the evidence gate twice | `failed_passes` |
 | `QUALITY_FAILURES` | Quality commands still fail after the fix pass; nothing is committed and the fixer's edits stay in the working tree | `score`, `review_url`, `failed_commands` |
 | `BLOCKERS_REMAIN` | The fix cycle pushed, but findings remain `partial` or `work-item-required` and the budget allows no further review, or the fixer returned a finding with no disposition | `score`, `review_url`, `commit_shas`, `work_items` |
@@ -289,7 +313,8 @@ finish; it does not assert that a pushed fix was reviewed.
 | `ABORT` | An unrecoverable error | `reason`, `message`, `score`, `review_url` |
 
 `ABORT` `reason` is one of `command_failed`, `head_mismatch`, `branch_mismatch`, `platform_auth`,
-`post_failed`, `read_only_role_mutated`. `work_items` entries are the records
+`post_failed`, `read_only_role_mutated`, `unsupported_scope`, `dirty_worktree`,
+`no_base`. `work_items` entries are the records
 the fixer wrote under `## Work Items Required`.
 
 ## Stop rules
