@@ -22,7 +22,7 @@ OUTCOME_CLAUSES = [
     "`Commands run: none` in any form from `correctness-reviewer` or "
     "`architecture-reviewer` is a complete, passing answer",
     "A `correctness-reviewer` or `architecture-reviewer` output whose "
-    "`Commands run` names any command failed its pass",
+    "`Commands run` lists commands is also a complete, passing answer",
 ]
 
 
@@ -70,12 +70,29 @@ def test_ignored_cache_attribution_matches_reviewer_tool_grants() -> None:
             "\n7. **",
         )
     )
-    attribution = (
-        "`standards-reviewer` runs the repository's lint, type, and test commands"
-    )
+    attribution = "every reviewer that runs commands may write ignored caches there"
     assert attribution in text
     for role in ("standards", "correctness", "architecture"):
         frontmatter = parse_frontmatter(REVIEWER_AGENTS / f"{role}-reviewer.md")
         tools = frontmatter["tools"]
         assert isinstance(tools, list)
-        assert ("Bash" in tools) is (role == "standards")
+        assert "Bash" in tools
+
+
+@pytest.mark.parametrize("role", ("correctness", "architecture"))
+def test_command_enabled_reviewers_remain_read_only_and_record_commands(
+    role: str,
+) -> None:
+    text = normalize((REVIEWER_AGENTS / f"{role}-reviewer.md").read_text())
+    assert (
+        "repository's read-only checks and configured lint, format, type, "
+        "and test commands" in text
+    )
+    assert (
+        "never a command that edits tracked files, commits, or changes the working tree"
+        in text
+    )
+    assert (
+        "List every command you ran in `Commands run`, or write "
+        "`none (read-only review)` when none ran" in text
+    )

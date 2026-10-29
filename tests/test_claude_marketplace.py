@@ -110,8 +110,7 @@ def test_consensus_review_reviewers_are_read_only_and_run_at_medium_effort() -> 
         assert frontmatter["effort"] == "medium"
         tools = set(frontmatter["tools"])
         assert read_only <= tools
-        # Only the standards reviewer runs the repository's lint and type checks.
-        assert ("Bash" in tools) == (name == "standards-reviewer")
+        assert "Bash" in tools
         assert not tools & {"Edit", "Write", "NotebookEdit"}
 
 
