@@ -158,14 +158,12 @@ prompt. Agents do not receive skill variables.
    failed its pass. A `v8ch:standards-reviewer` output whose `Commands run`
    names no command — `none` in any form, such as `none (read-only review)` —
    also failed its pass: that role has Bash and must run and record the
-   repository's checks. `v8ch:correctness-reviewer` and
-   `v8ch:architecture-reviewer` have only Read, Grep, and Glob, so
-   `Commands run: none` in any form from `v8ch:correctness-reviewer` or
-   `v8ch:architecture-reviewer` is a complete, passing answer and never by
-   itself a reason to rerun it. A `v8ch:correctness-reviewer` or
-   `v8ch:architecture-reviewer` output whose `Commands run` names any command
-   failed its pass. Rerun a reviewer that failed its
-   pass, once. On a second failure, emit `EVIDENCE_FAILED` with
+   repository's checks. `Commands run: none` in any form from
+   `v8ch:correctness-reviewer` or `v8ch:architecture-reviewer` is a complete,
+   passing answer. A `v8ch:correctness-reviewer` or
+   `v8ch:architecture-reviewer` output whose `Commands run` lists commands is
+   also a complete, passing answer. Rerun a reviewer that failed its pass,
+   once. On a second failure, emit `EVIDENCE_FAILED` with
    the failed pass names and stop, with no score.
 
 6. **Re-check the working tree.** Take the step 3 snapshot again and compare. On
@@ -173,9 +171,9 @@ prompt. Agents do not receive skill variables.
    nothing.
 
    The comparison covers new commits and changes to tracked and untracked paths
-   inside the repository. It does not cover ignored paths — `standards-reviewer`
-   runs the repository's lint, type, and test commands, which write caches there
-   — nor anything outside the repository. Those limits are why the roles are
+   inside the repository. It does not cover ignored paths — every reviewer that
+   runs commands may write ignored caches there — nor anything outside the
+   repository. Those limits are why the roles are
    also told not to write, rather than relying on this check alone.
 
 7. **Synthesize.** Invoke `v8ch:review-synthesizer` with all three outputs

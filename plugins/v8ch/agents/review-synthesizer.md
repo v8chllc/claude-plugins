@@ -31,9 +31,8 @@ section or either field failed its pass. A `standards-reviewer` output whose
 `none (read-only review)` — also failed its pass: that role must run and
 record the repository's checks. `Commands run: none` in any form from
 `correctness-reviewer` or `architecture-reviewer` is a complete, passing
-answer; those roles are read-only and run no commands. A
-`correctness-reviewer` or `architecture-reviewer` output whose `Commands run`
-names any command failed its pass.
+answer. A `correctness-reviewer` or `architecture-reviewer` output whose
+`Commands run` lists commands is also a complete, passing answer.
 
 If any pass failed, emit only this and stop — no score, no findings, nothing
 else:
