@@ -1,4 +1,4 @@
-"""Executable consensus-review v2 contract for the Claude Code plugin.
+"""Executable consensus-review v3 contract for the Claude Code plugin.
 
 Holds the scoring rules (C-1) and the audit-metadata schema (C-5) that
 ``post_review_comment.py`` and ``recover_context.py`` share. Keeping both in one
@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 COMMENT_MARKER = "consensus-review"
 COMMENT_TYPE = "review"
 
@@ -70,6 +70,7 @@ METADATA_KEYS: frozenset[str] = frozenset(
         "findings_closed",
         "findings_opened",
         "plan_source",
+        "deferred_source",
         "reviewed_sha",
         "schema_version",
         "scope_basis",
@@ -78,6 +79,7 @@ METADATA_KEYS: frozenset[str] = frozenset(
         "type",
     }
 )
+SCHEMA_2_KEYS = METADATA_KEYS - {"deferred_source"}
 COUNT_KEYS: tuple[str, ...] = ("files_touched", "findings_opened", "findings_closed")
 
 _WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
@@ -97,7 +99,7 @@ METADATA_BLOCK_RE = re.compile(
 
 
 class ContractError(ValueError):
-    """Raised when a value violates the consensus-review v2 contract."""
+    """Raised when a value violates the consensus-review v3 contract."""
 
 
 @dataclass(frozen=True)
@@ -282,8 +284,8 @@ def _require_sha(value: object, *, key: str) -> str:
     return value
 
 
-def validate_plan_source(value: object) -> str:
-    """Validate the plan-source value shared by the report and the metadata.
+def _validate_source(value: object, *, key: str) -> str:
+    """Validate a published provenance source.
 
     The value is published twice, in the Run Provenance line and in the metadata
     block, and read by people with no checkout of the machine that produced it.
@@ -291,22 +293,35 @@ def validate_plan_source(value: object) -> str:
     not cite one.
     """
     if not isinstance(value, str) or not value:
-        raise ContractError("Metadata 'plan_source' must be a non-empty string.")
+        raise ContractError(f"Metadata '{key}' must be a non-empty string.")
     if value == NO_PLAN_SOURCE:
         return value
-    if value.startswith(SUPPLIED_PLAN_PREFIX) and value[len(SUPPLIED_PLAN_PREFIX) :]:
+    if (
+        value.startswith(SUPPLIED_PLAN_PREFIX)
+        and value[len(SUPPLIED_PLAN_PREFIX) :].strip()
+    ):
         suffix = value[len(SUPPLIED_PLAN_PREFIX) :].strip()
         if suffix.startswith(("/", "~")) or _WINDOWS_DRIVE_RE.match(suffix):
             raise ContractError(
-                "Metadata 'plan_source' must not publish an absolute or "
-                f"home-directory path, got {suffix!r}. Cite the plan by its "
+                f"Metadata '{key}' must not publish an absolute or "
+                f"home-directory path, got {suffix!r}. Cite the source by its "
                 "repository-relative path or by a short description."
             )
         return value
     raise ContractError(
-        "Metadata 'plan_source' must be 'none' or "
+        f"Metadata '{key}' must be 'none' or "
         f"'{SUPPLIED_PLAN_PREFIX}<path or short description>', got {value!r}."
     )
+
+
+def validate_plan_source(value: object) -> str:
+    """Validate the plan source in the published comment."""
+    return _validate_source(value, key="plan_source")
+
+
+def validate_deferred_source(value: object) -> str:
+    """Validate the deferred source with the plan-source rule."""
+    return _validate_source(value, key="deferred_source")
 
 
 def validate_scope_basis(value: object) -> str:
@@ -325,21 +340,22 @@ def validate_scope_basis(value: object) -> str:
 
 
 def validate_metadata(payload: object) -> dict[str, Any]:
-    """Return the payload when it is a valid schema-v2 review block.
+    """Return the payload when it is a valid schema-v2 or schema-v3 review block.
 
     Raises ``ContractError`` otherwise. Callers that recover history treat any
     error as "ignore this comment"; callers that publish treat it as a failure.
     """
     if not isinstance(payload, dict):
         raise ContractError("Metadata must be a JSON object.")
-    if payload.get("schema_version") != SCHEMA_VERSION:
+    version = payload.get("schema_version")
+    if version not in (2, SCHEMA_VERSION):
         raise ContractError(
-            f"Metadata 'schema_version' must be {SCHEMA_VERSION}, got "
-            f"{payload.get('schema_version')!r}."
+            f"Metadata 'schema_version' must be 2 or {SCHEMA_VERSION}, got {version!r}."
         )
     keys = set(payload)
-    missing = sorted(METADATA_KEYS - keys)
-    unexpected = sorted(keys - METADATA_KEYS)
+    expected = METADATA_KEYS if version == SCHEMA_VERSION else SCHEMA_2_KEYS
+    missing = sorted(expected - keys)
+    unexpected = sorted(keys - expected)
     if missing or unexpected:
         raise ContractError(
             "Metadata key set mismatch"
@@ -365,6 +381,8 @@ def validate_metadata(payload: object) -> dict[str, Any]:
         )
     validate_status_band(payload["status"], payload["score"])
     validate_plan_source(payload["plan_source"])
+    if version == SCHEMA_VERSION:
+        validate_deferred_source(payload["deferred_source"])
     _require_sha(payload["reviewed_sha"], key="reviewed_sha")
     validate_scope_basis(payload["scope_basis"])
     for key in COUNT_KEYS:
@@ -410,8 +428,9 @@ def build_metadata(
     files_touched: int,
     findings_opened: int,
     findings_closed: int,
+    deferred_source: str = "none",
 ) -> dict[str, Any]:
-    """Build and validate the schema-v2 metadata payload for a review comment."""
+    """Build and validate the schema-v3 metadata payload for a review comment."""
     payload: dict[str, Any] = {
         "cycle": cycle,
         "delegation_mode": delegation_mode,
@@ -419,6 +438,7 @@ def build_metadata(
         "findings_closed": findings_closed,
         "findings_opened": findings_opened,
         "plan_source": plan_source,
+        "deferred_source": deferred_source,
         "reviewed_sha": reviewed_sha,
         "schema_version": SCHEMA_VERSION,
         "scope_basis": scope_basis,

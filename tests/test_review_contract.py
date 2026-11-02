@@ -295,6 +295,14 @@ def test_valid_metadata_fixture_passes_validation() -> None:
     assert contract.validate_metadata(dict(METADATA["valid"]))
 
 
+def test_schema_2_history_remains_valid_without_deferred_source() -> None:
+    prior = dict(METADATA["valid"], schema_version=2)
+    prior.pop("deferred_source")
+    assert contract.validate_metadata(prior) == prior
+    with pytest.raises(contract.ContractError, match="unexpected: deferred_source"):
+        contract.validate_metadata(dict(prior, deferred_source="none"))
+
+
 @pytest.mark.parametrize(
     "case",
     METADATA["valid_variants"],
@@ -312,7 +320,7 @@ def test_invalid_metadata_is_rejected(case: dict[str, Any]) -> None:
         contract.validate_metadata(metadata_case(case))
 
 
-def test_metadata_key_set_is_exactly_the_twelve_contract_keys() -> None:
+def test_metadata_key_set_is_exactly_the_thirteen_contract_keys() -> None:
     assert contract.METADATA_KEYS == {
         "cycle",
         "delegation_mode",
@@ -320,6 +328,7 @@ def test_metadata_key_set_is_exactly_the_twelve_contract_keys() -> None:
         "findings_closed",
         "findings_opened",
         "plan_source",
+        "deferred_source",
         "reviewed_sha",
         "schema_version",
         "scope_basis",
@@ -404,6 +413,10 @@ def test_plan_source_and_scope_basis_helpers() -> None:
         contract.validate_plan_source(None)
     with pytest.raises(contract.ContractError):
         contract.validate_scope_basis(7)
+    assert contract.validate_deferred_source("none") == "none"
+    assert contract.validate_deferred_source("supplied: deferred.json")
+    with pytest.raises(contract.ContractError):
+        contract.validate_deferred_source("supplied:    ")
 
 
 @pytest.mark.parametrize(
