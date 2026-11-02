@@ -10,7 +10,7 @@
     "tests/fixtures/consensus-review/metadata-cases.json": "13fabcd72aa09dc3d75e4c92a1aa81ea6cf28069545314bf856aceaa17cbf9dd",
     "tests/fixtures/consensus-review/review-comment-historical-latent.md": "3390eebb9ac5b65a28b6bfa9a17dfaf171958d95427b24d1da7126ea083f0449",
     "tests/fixtures/consensus-review/review-comment-v2.md": "4c66c2e7f04338b635a1df94c57248386931453dbc67100b2e4248730d6c2c1d",
-    "tests/fixtures/consensus-review/review-comment-v3.md": "c3d304aa950d96ba9d7d5301ed4b4053bf7d32f4491a2d3d59bd4687281ad479",
+    "tests/fixtures/consensus-review/review-comment-v3.md": "3e59b0b61f9f5403cadec67038a8c9d145a489a936d844f8685e0c0e03971c17",
     "tests/fixtures/consensus-review/review-report.md": "06e945c34315f338bf37e5f170415417bfab0f06b3110cd80a65553719338596",
     "tests/fixtures/consensus-review/review-summary.md": "a0fada32394850844d1a0e9618e6c3c6f25c66323381a1007bea27eddfe5e124",
     "tests/fixtures/consensus-review/scoring-cases.json": "e344e8f6223c764fff30a2cb07a99b96c3d5adf2be3f21362e8bf28fdc16f780"
