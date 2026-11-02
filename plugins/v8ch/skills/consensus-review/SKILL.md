@@ -30,18 +30,28 @@ branches. It ends with exactly one terminal signal.
    scope argument.
 2. **Plan file** (optional) — review context only. A plan never sets a severity
    and never deducts points.
-3. **Acceptance criteria and Regression Guards** (optional) — the caller may
+3. **Deferred** (optional) — caller-supplied `deferred` JSON text or a file path
+   identified as that input; read a file in full. A local review accepts a
+   `deferred` file only. The value is never recovered from PR/MR comments.
+   The JSON value is an array of objects with non-empty string `summary` and
+   `reason`, `work_item` as string or null, and optional `repository` as an
+   `owner/repo` string or null. Array positions are 1-based entry numbers.
+   A null or omitted repository is run-wide; a named repository must be the
+   reviewed repository. Only the synthesizer consumes this input. Reviewers
+   and the fixer receive none.
+4. **Acceptance criteria and Regression Guards** (optional) — the caller may
    supply the run's stated criteria and guards as text or file paths. Read file
    inputs in full. When absent, use only criteria and guards explicitly stated
    in the supplied review context; do not invent them.
-4. **Single-cycle cap** (optional, PR/MR only) — when the caller declares it,
+5. **Single-cycle cap** (optional, PR/MR only) — when the caller declares it,
    run at most one review in this invocation. Otherwise use the normal budget.
    A local review ignores a single-cycle cap or `review_budget: single_cycle`.
-5. **Scope** — resolved below. Without a PR/MR reference, the only accepted
-   inputs are the plan file and acceptance criteria and Regression Guards as
-   text or files, each identified as that input by the caller. Any other
-   argument is an unsupported scope argument, including a commit SHA, a branch
-   name or range, a list of paths, or a path not identified as an accepted input.
+6. **Scope** — resolved below. Without a PR/MR reference, the only accepted
+   inputs are the plan file, a file identified as the `deferred` input, and
+   acceptance criteria and Regression Guards as text or files, each identified as that input
+   by the caller. Any other argument is an unsupported scope argument,
+   including a commit SHA, a branch name or range, a list of paths, or a
+   path not identified as an accepted input.
 
 ## Scope ladder
 
@@ -85,8 +95,8 @@ If the resolved PR/MR scope is empty, emit `NO_DIFF` and stop.
 Cycle 01 reviews the full diff.
 
 A later cycle reviews `git diff <reviewed_sha>..HEAD`, where `reviewed_sha` comes
-from the latest valid schema-v2 review comment, and also confirms whether the
-prior cycle's findings closed. The narrowing is by time, not by file: every
+from the latest valid schema-v2 or schema-v3 review comment, and also confirms
+whether the prior cycle's findings closed. The narrowing is by time, not by file: every
 commit since that SHA is in scope whatever it touches, so a regression a fix
 introduced anywhere is still reviewed.
 
@@ -177,8 +187,9 @@ prompt. Agents do not receive skill variables.
    also told not to write, rather than relying on this check alone.
 
 7. **Synthesize.** Invoke `v8ch:review-synthesizer` with all three outputs
-   labeled in full, the delegation mode, the plan source, the acceptance
-   criteria and Regression Guards, and `RECOVERED_CONTEXT`. It decides the
+   labeled in full, the delegation mode, the plan source, the `deferred` input
+   and its source, the reviewed repository, the acceptance criteria and Regression Guards,
+   and `RECOVERED_CONTEXT`. It decides the
    score and the status; you do not recompute either. Repeat step 6 afterwards.
 
    The synthesizer applies the same evidence gate as step 5. If it returns
@@ -194,8 +205,8 @@ prompt. Agents do not receive skill variables.
      review never fixes.
    - **PR/MR number:** invoke `v8ch:consensus-review-poster` once with the
      report, the PR/MR number, the cycle, the status, the score, the delegation
-     mode, the plan source, the reviewed SHA, the scope basis, the blast-radius
-     counts, the repository directory, `${CLAUDE_SKILL_DIR}`, and a scratch
+     mode, the plan source, the deferred source, the reviewed SHA, the scope
+     basis, the blast-radius counts, the repository directory, `${CLAUDE_SKILL_DIR}`, and a scratch
      directory. Hand over the scope basis exactly as `recover_context.py`
      printed it in `RECOVERED_CONTEXT` and the reviewed SHA exactly as
      `git rev-parse HEAD` printed it in step 3: do not reformat, abbreviate, or
@@ -261,6 +272,12 @@ A supplied plan is review context. Record its source identically in the report's
 Run Provenance line and in the `plan_source` metadata: the literal `none` when
 no plan was supplied, otherwise `supplied: <path or short description>`. Never
 recover a plan from PR/MR comments.
+
+Record the `deferred` source with the same rule in the report's Run Provenance
+line and the `deferred_source` metadata: `none` when the input is absent or an
+empty array, otherwise `supplied: <path or short description>`. Never recover
+the `deferred` input from PR/MR comments. Pass this source to the synthesizer
+and poster; only the synthesizer receives the input itself.
 
 ## Citations
 
