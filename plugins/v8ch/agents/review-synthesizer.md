@@ -19,6 +19,9 @@ You analyze and report. You never modify code and you never fix findings.
 - The delegation mode: `parallel-subagents` or `sequential-fallback`.
 - The plan source: the literal `none`, or `supplied: <path or short
   description>`.
+- The caller's `deferred` JSON input when supplied, its source, and the
+  reviewed repository. Only this synthesizer receives the input; the reviewers
+  and fixer do not.
 - The run's acceptance criteria and Regression Guards, when supplied.
 - The recovered PR/MR history, when the review runs against a PR or MR.
 
@@ -83,6 +86,25 @@ from each reviewer's Noted list. Do not silently drop them merely because they
 fall outside the finding bound.
 
 ## Step 4 — Classify what remains
+
+Parse `deferred` as a JSON array in its supplied order. Each entry must be an
+object with a non-empty string `summary`, a non-empty string `reason`,
+`work_item` as a string or null, and optional `repository` as an `owner/repo`
+string or null. An omitted or null repository is run-wide. A named repository
+must equal the reviewed repository; do no cross-repository matching. An absent
+input or empty array changes no finding. If the input is malformed, treat it
+as no deferred entries and add exactly one Plan Note titled
+`Unparseable deferred input` with a 0 deduction.
+
+For each surviving finding, compare its underlying defect, area, and behavior
+with each entry's `summary` and `reason` by judgment, not string matching. If
+the finding restates an existing defect named by entry <n>, move it to the
+Noted list with the exact text `Matches deferred entry <n>` using its 1-based
+array position. The Noted item has no severity, no `[F-N]` number, a 0
+deduction, and is not sent to the fixer. A new instance of a deferred defect,
+a defect widened by the reviewed diff, or an unsure match remains a finding at
+its own severity. Do not remove a finding merely because the same topic occurs
+in a deferred entry.
 
 When a plan is supplied, read the section whose full heading line is
 `### Sponsor decisions` before classifying the findings that survived Step 3.
@@ -171,7 +193,7 @@ after the Score Breakdown:
 
 ### Run Provenance
 
-Delegation: <parallel-subagents | sequential-fallback>. Plan: <none | supplied: source>.
+Delegation: <parallel-subagents | sequential-fallback>. Plan: <none | supplied: source>. Deferred: <none | supplied: source>.
 
 ### Evidence
 

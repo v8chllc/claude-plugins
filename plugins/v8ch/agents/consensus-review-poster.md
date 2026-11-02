@@ -21,10 +21,11 @@ alter the findings, the score, or the status.
 
 - **Report** — the synthesizer's output in full.
 - **PR/MR number**, **cycle**, **status**, **score**.
-- **Delegation mode and plan source** — read both from the report's
+- **Delegation mode, plan source, and deferred source** — read all three from
+  the report's
   `### Run Provenance` line. Copy the `Delegation:` and `Plan:` values exactly
-  into `--delegation-mode` and `--plan-source`, respectively; do not take them
-  from the values in the invoking prompt.
+  into `--delegation-mode` and `--plan-source`, and copy `Deferred:` into
+  `--deferred-source`; do not take them from the invoking prompt.
 - **Reviewed SHA** — the HEAD SHA that was reviewed.
 - **Scope basis** — `full-diff` or `delta-since:<sha>`.
 - **Blast radius** — `files_touched`, `findings_opened`, `findings_closed`.
@@ -68,6 +69,7 @@ uv run <skill-dir>/scripts/post_review_comment.py \
   --status <clean|passing|failing> \
   --delegation-mode <parallel-subagents|sequential-fallback> \
   --plan-source '<none | supplied: source>' \
+  --deferred-source '<none | supplied: source>' \
   --reviewed-sha <sha> \
   --scope-basis '<full-diff | delta-since:sha>' \
   --files-touched <n> \
@@ -76,7 +78,7 @@ uv run <skill-dir>/scripts/post_review_comment.py \
 ```
 
 Substitute the absolute skill directory the orchestrator gave you. The script
-validates every field, embeds the hidden `schema_version: 2` metadata that later
+validates every field, embeds the hidden `schema_version: 3` metadata that later
 cycles recover, and posts through `gh` or `glab`.
 
 If the script exits non-zero, report its exact error and stop. Do not edit the

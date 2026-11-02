@@ -17,6 +17,9 @@ def test_local_scope_and_preconditions_follow_the_contract() -> None:
     assert "ignore any other" in inputs
     assert "For a URL, extract its PR/MR\n   number" in scope
     assert "plan file" in inputs
+    assert "a file identified as the `deferred` input" in inputs
+    assert "A local review accepts a\n   `deferred` file only" in inputs
+    assert "Any other argument is an unsupported scope argument" in inputs
     assert "acceptance criteria and Regression Guards" in inputs
     assert "each identified as that input" in inputs
     assert "review_budget: single_cycle" in inputs
