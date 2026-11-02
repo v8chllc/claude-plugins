@@ -100,11 +100,13 @@ Grade by what happens if the defect ships:
   breaks a user-facing flow.
 - **MEDIUM** — edge-case incorrect behavior, a missing validation or guard, or a
   silent failure.
-- **LOW** — a defensive gap with no reachable trigger today.
+- **LOW** — a minor incorrect consequence on a reachable path.
 
-A defect that is safe only because an invariant elsewhere holds is still a
-finding. Say which invariant, and grade it by the failure that follows if that
-invariant moves.
+Grade only a consequence inside the finding bound that current code can reach.
+A gap safe today only because another condition holds, or that would fail only
+after a future change, goes in Noted without a severity. Name the condition
+that keeps it safe in the Noted bullet. Maintenance cost, convention, style, or
+structure alone goes in Noted at any size.
 
 ## Do not write
 

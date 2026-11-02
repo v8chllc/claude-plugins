@@ -33,9 +33,8 @@ SEVERITY_DEDUCTIONS: dict[str, int] = {
 
 MUST_FIX = "must-fix"
 SHOULD_FIX = "should-fix"
-LATENT = "latent"
 PLAN_NOTE = "plan-note"
-SECTIONS: tuple[str, ...] = (MUST_FIX, SHOULD_FIX, LATENT, PLAN_NOTE)
+SECTIONS: tuple[str, ...] = (MUST_FIX, SHOULD_FIX, PLAN_NOTE)
 BLOCKING_SECTIONS: frozenset[str] = frozenset({MUST_FIX, SHOULD_FIX})
 
 SCORE_MAX = 100
@@ -136,10 +135,9 @@ class Finding:
 def deduction(finding: Finding) -> int:
     """Return the points a single finding deducts.
 
-    A latent finding deducts at the severity of its would-be failure, so it is
-    scored like any other defect. Plan Notes deduct nothing. Reviewer count is
-    not an input: a finding raised once deducts exactly what the same finding
-    raised three times deducts.
+    Plan Notes deduct nothing. Reviewer count is not an input: a finding
+    raised once deducts exactly what the same finding raised three times
+    deducts.
     """
     if finding.section == PLAN_NOTE:
         return 0
@@ -220,13 +218,17 @@ def advisory_open_findings(
     report_status = REPORT_STATUS_RE.search(report_text)
     if report_status is None or report_status.group(1) != status_label(status):
         raise ContractError("The report status and review metadata disagree.")
+    if any(
+        line.strip() == "### Latent Findings"
+        for line in _structural_markdown_lines(report_text)
+    ):
+        raise ContractError("A new report cannot contain a Latent Findings section.")
     if score < CLEAN_MIN_SCORE or status != STATUS_PASSING:
         return None
 
     sections: dict[str, list[str]] = {
         "Must Fix": [],
         "Should Fix": [],
-        "Latent Findings": [],
     }
     current_section: str | None = None
     ordered: list[dict[str, str]] = []

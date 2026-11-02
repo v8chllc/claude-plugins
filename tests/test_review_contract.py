@@ -95,6 +95,17 @@ def test_finding_requires_a_known_section() -> None:
         contract.Finding("F-1", "nice-to-have", "LOW")
 
 
+def test_new_report_rejects_latent_findings() -> None:
+    with pytest.raises(contract.ContractError, match="Unknown section"):
+        contract.Finding("F-1", "latent", "LOW")
+
+
+def test_advisory_rejects_a_latent_section_in_a_new_report() -> None:
+    report = advisory_report(96, "Passing") + "\n### Latent Findings\n\nNone.\n"
+    with pytest.raises(contract.ContractError, match="Latent Findings"):
+        contract.advisory_open_findings(report, score=96, status="passing")
+
+
 def test_clean_needs_both_the_score_and_an_empty_blocker_list() -> None:
     blocked = [contract.Finding("F-1", contract.SHOULD_FIX, "LOW")]
     assert contract.review_status(98, blocked) == contract.STATUS_PASSING
@@ -129,7 +140,6 @@ def advisory_report(score: int, status: str, *, must_fix: bool = False) -> str:
         f"### Must Fix\n\n{must}\n"
         "### Should Fix\n\n#### [F-1] [LOW] first\n\n"
         "#### [F-2] [LOW] second\n\n"
-        "### Latent Findings\n\n#### [F-3] [LOW] latent\n"
     )
 
 
@@ -139,7 +149,6 @@ def test_advisory_handoff_keeps_report_order_at_threshold(score: int) -> None:
     assert contract.advisory_open_findings(report, score=score, status="passing") == [
         {"id": "F-1", "section": "Should Fix"},
         {"id": "F-2", "section": "Should Fix"},
-        {"id": "F-3", "section": "Latent Findings"},
     ]
 
 
@@ -160,7 +169,6 @@ def test_advisory_handoff_ignores_finding_headings_inside_fences() -> None:
     assert contract.advisory_open_findings(report, score=96, status="passing") == [
         {"id": "F-1", "section": "Should Fix"},
         {"id": "F-2", "section": "Should Fix"},
-        {"id": "F-3", "section": "Latent Findings"},
     ]
 
 
@@ -171,7 +179,6 @@ def test_backtick_in_fence_info_does_not_hide_report_findings() -> None:
         "### Should Fix\n\n#### [F-1] [LOW] first\n\n"
         "```language`invalid\n"
         "#### [F-2] [LOW] second\n\n"
-        "### Latent Findings\n\nNone.\n"
     )
     assert contract.advisory_open_findings(report, score=96, status="passing") == [
         {"id": "F-1", "section": "Should Fix"},
@@ -203,7 +210,6 @@ def test_advisory_boundary_uses_the_existing_score_contract(
             f"#### [{finding.identifier}] [{finding.severity}] finding"
             for finding in findings
         )
-        + "\n\n### Latent Findings\n\nNone.\n"
     )
     assert score == expected_score
     handoff = contract.advisory_open_findings(report, score=score, status=status)
@@ -240,7 +246,6 @@ def test_advisory_cli_emits_the_compact_handoff(tmp_path: Path) -> None:
     assert json.loads(result.stdout) == [
         {"id": "F-1", "section": "Should Fix"},
         {"id": "F-2", "section": "Should Fix"},
-        {"id": "F-3", "section": "Latent Findings"},
     ]
 
 

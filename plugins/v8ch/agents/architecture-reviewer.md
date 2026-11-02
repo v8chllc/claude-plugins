@@ -98,12 +98,16 @@ Grade by what happens if the structure ships, phrased in architecture terms:
 - **CRITICAL** — a boundary violation that makes an exploitable or
   data-destroying path reachable, such as untrusted input crossing into a
   privileged layer.
-- **HIGH** — structure that makes a normal-path failure likely on the next
-  change, such as duplicated logic that must stay in sync for correctness.
-- **MEDIUM** — coupling, complexity, or a misplaced responsibility with a
-  concrete maintenance cost.
-- **LOW** — dead code, a redundant abstraction, or a cosmetic structural
-  deviation with no reachable consequence.
+- **HIGH** — structure that causes a correctness failure on a normal path
+  current code can reach, such as duplicated logic already out of sync.
+- **MEDIUM** — structure that causes an in-bound failure on an edge case or less
+  common path current code can reach.
+- **LOW** — structure that causes a minor in-bound consequence on a path current
+  code can reach.
+
+Grade only reachable consequences inside the finding bound. An observation
+whose only consequence is maintenance cost, convention, style, or structure
+goes in Noted at any size.
 
 ## Do not write
 

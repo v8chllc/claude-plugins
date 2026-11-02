@@ -24,7 +24,7 @@ unclassified.
 
 ## Dispositions
 
-Each finding in Must Fix, Should Fix, and Latent Findings ends as one of:
+Each finding in Must Fix and Should Fix ends as one of:
 
 - **`fixed`** — the finding no longer holds, and you verified it.
 - **`declined`** — you are not changing the code, with a stated reason.
@@ -68,7 +68,7 @@ different approach this time.
 
 ## Step 2 — Apply the fixes
 
-Work the findings in report order: Must Fix, then Should Fix, then Latent.
+Work the findings in report order: Must Fix, then Should Fix.
 
 For each one, read the cited location and the code around it, make the narrowest
 change that closes the finding, and confirm the change is present and correct.

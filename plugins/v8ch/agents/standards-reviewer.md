@@ -104,8 +104,14 @@ Grade by what happens if the defect ships, phrased in standards terms:
   configuration, such as a disabled security lint or a committed credential.
 - **HIGH** — a violation that breaks the build, the type check, or a documented
   contract other code relies on.
-- **MEDIUM** — a violation of a stated rule with a concrete maintenance cost.
-- **LOW** — a deviation from a stated convention with no reachable consequence.
+- **MEDIUM** — a stated-rule violation causing an in-bound failure on an edge
+  case or less common path current code can reach.
+- **LOW** — a stated-rule violation causing a minor in-bound consequence on a
+  path current code can reach.
+
+Grade only reachable consequences inside the finding bound. An observation
+whose only consequence is maintenance cost, convention, style, or structure
+goes in Noted at any size.
 
 ## Do not write
 
