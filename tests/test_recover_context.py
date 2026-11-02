@@ -514,7 +514,8 @@ def test_cycle_two_recovers_historical_latent_finding_and_its_closure() -> None:
     current_report = (
         "### Quality Score: 100/100 — Fully Clean\n\n"
         "### Evidence\n\n- **Files examined:** src/auth.py\n\n"
-        "### Summary\n\n- Earlier [F-3] closed: the role check now lives in the callee.\n\n"
+        "### Summary\n\n"
+        "- Earlier [F-3] closed: the role check now lives in the callee.\n\n"
         "### Must Fix\n\nNone.\n\n### Should Fix\n\nNone.\n\n"
         "### Plan Notes\n\nNone.\n\n### Noted\n\nNone.\n\n"
         "### Score Breakdown\n\n| **Final score** | **100/100** |\n"
