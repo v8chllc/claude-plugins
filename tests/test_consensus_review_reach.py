@@ -43,6 +43,32 @@ def test_correctness_severity_requires_current_reach() -> None:
     assert "no reachable trigger" not in section
 
 
+def test_architecture_high_keeps_current_failure_and_routes_future_only_case() -> None:
+    section = severity("architecture-reviewer.md")
+    normalized = " ".join(section.split())
+    assert "duplicated logic already out of sync" in normalized
+    assert "future change updates one copy goes in Noted, not HIGH" in normalized
+    assert "agreement between the current copies as the condition" in normalized
+
+
+def test_no_reviewer_grade_uses_a_future_only_example() -> None:
+    for name in (
+        "correctness-reviewer.md",
+        "standards-reviewer.md",
+        "architecture-reviewer.md",
+    ):
+        blocks = re.findall(
+            r"(?ms)^- \*\*(?:CRITICAL|HIGH|MEDIUM|LOW)\*\*.*?"
+            r"(?=\n- \*\*|\n\n|\Z)",
+            severity(name),
+        )
+        assert len(blocks) == 4
+        for block in blocks:
+            assert "next change" not in block
+            assert "future change" not in block
+            assert "no reachable trigger" not in block
+
+
 def test_current_assets_have_no_latent_section_or_hypothetical_grade() -> None:
     assets = [
         *AGENTS.glob("*reviewer.md"),

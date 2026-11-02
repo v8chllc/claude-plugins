@@ -105,6 +105,11 @@ Grade by what happens if the structure ships, phrased in architecture terms:
 - **LOW** — structure that causes a minor in-bound consequence on a path current
   code can reach.
 
+Duplicated logic whose copies currently agree and would fail only when a future
+change updates one copy goes in Noted, not HIGH. Its Noted bullet names the
+agreement between the current copies as the condition keeping current behavior
+safe.
+
 Grade only reachable consequences inside the finding bound. An observation
 whose only consequence is maintenance cost, convention, style, or structure
 goes in Noted at any size.
