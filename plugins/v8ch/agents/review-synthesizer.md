@@ -133,14 +133,15 @@ Notes and rank any independent defect normally. Cite both entries when decisions
 conflict; do not resolve the conflict. Classify a finding that matches no entry
 exactly as before.
 
-Severity is the consequence if the finding is true, as the reviewer graded it.
+Severity is the consequence current code can reach inside the finding bound,
+as the reviewer graded it. A gap safe today only because another condition
+holds, or that would fail only after a future change, goes in Noted without
+a severity or deduction. Name the condition in its Noted bullet. Maintenance
+cost, convention, style, or structure alone also goes in Noted at any size.
 Place each finding in exactly one section:
 
 - **Must Fix** — CRITICAL or HIGH with a demonstrated failure.
-- **Should Fix** — MEDIUM or LOW with a concrete cost.
-- **Latent Findings** — safe today only because an invariant elsewhere holds.
-  Name the invariant, where it is enforced, and the failure that follows if it
-  moves. A latent finding takes the severity of its would-be failure.
+- **Should Fix** — MEDIUM or LOW with a reachable in-bound consequence.
 - **Plan Notes** — divergences from the supplied plan that cause no defect,
   plus sponsor-decision contradictions routed here by the rule above. No
   severity tag, no deduction. Rank an ordinary plan divergence that causes a
@@ -148,9 +149,9 @@ Place each finding in exactly one section:
   a demonstrated CRITICAL or HIGH failure or an independent defect; the
   contradicted part remains an unscored Plan Note.
 
-Number findings `[F-1]`, `[F-2]`, … sequentially across Must Fix, Should Fix,
-and Latent Findings, in that order. These numbers are quoted downstream and must
-stay stable for the life of the report.
+Number findings `[F-1]`, `[F-2]`, … sequentially across Must Fix and Should
+Fix, in that order. These numbers are quoted downstream and must stay stable
+for the life of the report.
 
 ## Step 5 — Score
 
@@ -163,8 +164,7 @@ Start at 100 and deduct once per emitted defect:
 | MEDIUM | 5 |
 | LOW | 2 |
 
-Plan Notes deduct 0. Latent findings deduct at the severity of their would-be
-failure. Floor the total at 1; never exceed 100.
+Plan Notes deduct 0. Floor the total at 1; never exceed 100.
 
 Then set the status — the three are mutually exclusive:
 
@@ -208,8 +208,6 @@ Delegation: <parallel-subagents | sequential-fallback>. Plan: <none | supplied: 
 
 ### Should Fix
 
-### Latent Findings
-
 ### Plan Notes
 
 ### Noted
@@ -223,7 +221,7 @@ Write `None.` under any section with no entries. Noted contains one list of
 unscored observations, separate from findings and Plan Notes. Noted items need
 no individual disposition and are not fixed unless the sponsor asks.
 
-Findings in Must Fix, Should Fix, and Latent Findings take this shape:
+Findings in Must Fix and Should Fix take this shape:
 
 ```markdown
 #### [F-2] [HIGH] Recovered cycle number is coerced instead of rejected
@@ -238,13 +236,6 @@ review that is not the latest.
 already requires.
 
 **Reviewers:** correctness-reviewer, architecture-reviewer
-```
-
-A Latent finding adds one more field:
-
-```markdown
-**Invariant:** Safe only while every comment is written by this script, which
-enforces the integer type. Enforced in `review_contract.validate_metadata`.
 ```
 
 Plan Notes carry no severity tag and no `[F-N]` number: a title, a

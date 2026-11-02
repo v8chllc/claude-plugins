@@ -224,7 +224,7 @@ prompt. Agents do not receive skill variables.
    ```
 
    The helper is the single advisory eligibility decision point. It returns a
-   JSON list of `{ "id": "F-N", "section": "Should Fix|Latent Findings" }`
+   JSON list of `{ "id": "F-N", "section": "Should Fix" }`
    entries in report order, or `null` when the normal status route applies. It
    checks the score and status against the posted report. A helper error ends in
    `ABORT` with `reason` `command_failed`; never report completion after an

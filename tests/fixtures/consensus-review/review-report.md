@@ -39,10 +39,6 @@ report that looks complete and contains nothing.
 
 **Reviewers:** standards-reviewer
 
-### Latent Findings
-
-None.
-
 ### Plan Notes
 
 None.

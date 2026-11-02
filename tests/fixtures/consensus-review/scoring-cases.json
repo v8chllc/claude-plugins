@@ -25,22 +25,6 @@
       "expected_status": "passing"
     },
     {
-      "name": "a low latent finding deducts but does not block clean",
-      "findings": [
-        {"identifier": "F-1", "section": "latent", "severity": "LOW"}
-      ],
-      "expected_score": 98,
-      "expected_status": "clean"
-    },
-    {
-      "name": "a high latent finding deducts at its would-be severity",
-      "findings": [
-        {"identifier": "F-1", "section": "latent", "severity": "HIGH"}
-      ],
-      "expected_score": 90,
-      "expected_status": "passing"
-    },
-    {
       "name": "mixed must-fix and should-fix deduct once each",
       "findings": [
         {"identifier": "F-1", "section": "must-fix", "severity": "MEDIUM"},
@@ -72,7 +56,7 @@
       "findings": [
         {"identifier": "F-1", "section": "must-fix", "severity": "HIGH"},
         {"identifier": "F-2", "section": "should-fix", "severity": "MEDIUM"},
-        {"identifier": "F-3", "section": "latent", "severity": "LOW"}
+        {"identifier": "F-3", "section": "should-fix", "severity": "LOW"}
       ],
       "expected_score": 83,
       "expected_status": "failing"
