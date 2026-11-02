@@ -7,7 +7,7 @@
 """Render and post the consensus-review comment for the Claude Code plugin.
 
 Reads the platform from ``DEV_SEC_OPS_PLATFORM`` or ``--platform``, validates
-every schema-v2 field against ``review_contract``, renders
+every schema-v3 field against ``review_contract``, renders
 ``templates/review-comment.md.tmpl``, and posts the result with ``gh`` or
 ``glab``. Status and summary authorship stay with the calling role; this script
 owns validation, deterministic rendering, and transport.
@@ -143,11 +143,17 @@ def load_template() -> Template:
 
 
 def build_provenance_line(
-    *, delegation_mode: str, plan_source: str, scope_basis: str, reviewed_sha: str
+    *,
+    delegation_mode: str,
+    plan_source: str,
+    deferred_source: str,
+    scope_basis: str,
+    reviewed_sha: str,
 ) -> str:
     """Render the single provenance line shown above the summary."""
     return (
         f"Delegation: {delegation_mode}. Plan: {plan_source}. "
+        f"Deferred: {deferred_source}. "
         f"Scope: {scope_basis}. Reviewed: {reviewed_sha}."
     )
 
@@ -166,6 +172,7 @@ def build_comment_body(
     files_touched: int,
     findings_opened: int,
     findings_closed: int,
+    deferred_source: str = "none",
 ) -> str:
     """Build the full review comment, metadata block first."""
     validate_report(report_text)
@@ -176,6 +183,7 @@ def build_comment_body(
         score=score,
         delegation_mode=delegation_mode,
         plan_source=plan_source,
+        deferred_source=deferred_source,
         reviewed_sha=reviewed_sha,
         scope_basis=scope_basis,
         files_touched=files_touched,
@@ -191,6 +199,7 @@ def build_comment_body(
             "provenance_line": build_provenance_line(
                 delegation_mode=delegation_mode,
                 plan_source=plan_source,
+                deferred_source=deferred_source,
                 scope_basis=scope_basis,
                 reviewed_sha=reviewed_sha,
             ),
@@ -289,6 +298,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="'none', or 'supplied: <path or short description>'",
     )
     parser.add_argument(
+        "--deferred-source",
+        required=True,
+        help="'none', or 'supplied: <path or short description>'",
+    )
+    parser.add_argument(
         "--reviewed-sha", required=True, help="Reviewed HEAD SHA (7-40 lowercase hex)"
     )
     parser.add_argument(
@@ -327,6 +341,7 @@ def main(argv: list[str] | None = None) -> int:
             score=resolve_score(report_text),
             delegation_mode=args.delegation_mode,
             plan_source=args.plan_source,
+            deferred_source=args.deferred_source,
             reviewed_sha=args.reviewed_sha,
             scope_basis=args.scope_basis,
             files_touched=args.files_touched,

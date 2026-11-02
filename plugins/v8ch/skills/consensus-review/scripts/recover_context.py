@@ -7,7 +7,7 @@
 """Recover consensus-review history from a PR/MR thread for the Claude plugin.
 
 The PR/MR thread is the durable audit trail. This script fetches its comments,
-keeps the ones carrying a valid schema-v2 ``consensus-review`` block, lists
+keeps the ones carrying a valid schema-v2 or schema-v3 ``consensus-review`` block, lists
 schema-v1 review comments as legacy history, and resolves the scope basis for
 the next cycle: the delta since the latest v2 reviewed SHA when that SHA is
 still an ancestor of HEAD, and the full diff otherwise.
@@ -121,7 +121,7 @@ def normalize_comment(raw: dict[str, Any]) -> dict[str, str]:
 
 
 def parse_review_comments(raw_comments: list[dict[str, Any]]) -> list[ReviewComment]:
-    """Keep the valid schema-v2 reviews plus the schema-v1 legacy reviews.
+    """Keep valid schema-v2/v3 reviews plus schema-v1 legacy reviews.
 
     A comment whose metadata fails validation is ignored entirely, so a
     malformed or hand-edited block can never supply history or a scope basis.
@@ -298,7 +298,7 @@ def resolve_scope_basis(
     """Return the scope basis for the next cycle and the reason for it."""
     current = [review for review in reviews if not review.legacy]
     if not current:
-        return FULL_DIFF, "no prior schema-v2 review comment on this PR/MR"
+        return FULL_DIFF, "no prior schema-v2/v3 review comment on this PR/MR"
 
     latest = current[-1]
     sha = str(latest.metadata["reviewed_sha"])
@@ -317,7 +317,7 @@ def resolve_scope_basis(
         )
     return (
         f"{DELTA_SINCE_PREFIX}{sha}",
-        f"latest schema-v2 review is cycle {latest.cycle:02d}, reviewed {sha}",
+        f"latest schema-v2/v3 review is cycle {latest.cycle:02d}, reviewed {sha}",
     )
 
 
@@ -334,6 +334,7 @@ def provenance_line(review: ReviewComment) -> str:
     return (
         f"Score: {review.score}. Status: {review.status}. "
         f"Delegation: {metadata['delegation_mode']}. Plan: {metadata['plan_source']}. "
+        f"Deferred: {metadata.get('deferred_source', 'none')}. "
         f"Scope: {metadata['scope_basis']}. Reviewed: {metadata['reviewed_sha']}. "
         f"Blast radius: {metadata['files_touched']} files, "
         f"{metadata['findings_opened']} opened, {metadata['findings_closed']} closed."
@@ -388,7 +389,7 @@ def build_context_output(
                 "",
             ]
     else:
-        lines += ["None. This is the first schema-v2 cycle.", ""]
+        lines += ["None. This is the first schema-v2/v3 cycle.", ""]
 
     if legacy:
         lines += [

@@ -41,6 +41,8 @@ REQUIRED_ARGS = [
     "parallel-subagents",
     "--plan-source",
     "none",
+    "--deferred-source",
+    "none",
     "--reviewed-sha",
     "1a2b3c4",
     "--scope-basis",
@@ -187,7 +189,7 @@ def test_score_comes_only_from_the_report_heading() -> None:
     assert "--score" not in module.build_parser().format_help()
 
 
-def test_comment_body_opens_with_exact_v2_metadata(tmp_path: Path) -> None:
+def test_comment_body_opens_with_exact_v3_metadata(tmp_path: Path) -> None:
     module = load_post_review_comment()
     body = module.build_comment_body(
         report_text=REPORT,
@@ -213,8 +215,9 @@ def test_comment_body_opens_with_exact_v2_metadata(tmp_path: Path) -> None:
         "findings_closed": 1,
         "findings_opened": 2,
         "plan_source": "none",
+        "deferred_source": "none",
         "reviewed_sha": "1a2b3c4",
-        "schema_version": 2,
+        "schema_version": 3,
         "scope_basis": "full-diff",
         "score": 91,
         "status": "passing",
@@ -243,7 +246,7 @@ def test_comment_body_renders_the_template_without_placeholders() -> None:
     assert "*Score: 91/100 (Passing).*" in body
     assert (
         "Delegation: parallel-subagents. Plan: supplied: .plan/feature.md. "
-        "Scope: delta-since:9f3a25e. Reviewed: 1a2b3c4." in body
+        "Deferred: none. Scope: delta-since:9f3a25e. Reviewed: 1a2b3c4." in body
     )
     assert "<summary>Evidence and full findings</summary>" in body
     assert "[F-1] [HIGH]" in body
@@ -292,7 +295,18 @@ def test_main_posts_to_github_by_default(
     assert len(posted) == 1
     assert posted[0]["platform"] == "github"
     assert posted[0]["pr_number"] == 7
-    assert '"schema_version":2' in posted[0]["body"]
+    assert '"schema_version":3' in posted[0]["body"]
+
+
+def test_main_requires_deferred_source(tmp_path: Path) -> None:
+    module = load_post_review_comment()
+    review_file, summary_file = write_inputs(tmp_path)
+    args = base_args(review_file, summary_file)
+    index = args.index("--deferred-source")
+    del args[index : index + 2]
+    with pytest.raises(SystemExit) as error:
+        module.build_parser().parse_args(args)
+    assert error.value.code == 2
 
 
 def test_main_posts_to_gitlab_when_the_env_file_selects_it(
@@ -446,12 +460,12 @@ def test_only_the_review_template_ships() -> None:
 def test_the_script_still_renders_the_frozen_wire_format() -> None:
     """The rendered comment is the wire format both toolchains read.
 
-    ``review-comment-v2.md`` is the frozen output for the fixture report and
+    ``review-comment-v3.md`` is the frozen output for the fixture report and
     summary. A change here is a change to what the sibling toolchain must parse,
     so it fails until both repositories move together.
     """
     module = load_post_review_comment()
-    expected = (FIXTURES_DIR / "review-comment-v2.md").read_text(encoding="utf-8")
+    expected = (FIXTURES_DIR / "review-comment-v3.md").read_text(encoding="utf-8")
     rendered = module.build_comment_body(
         report_text=(FIXTURES_DIR / "review-report.md")
         .read_text(encoding="utf-8")

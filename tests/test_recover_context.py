@@ -55,7 +55,7 @@ def github_comment(body: str, *, created_at: str = "2026-09-10T12:00:00Z") -> di
 
 
 def rendered_comment(**overrides: Any) -> str:
-    """Render a v2 comment with the sibling script, as a real thread would hold."""
+    """Render a v3 comment with the sibling script, as a real thread would hold."""
     module = load_post_review_comment()
     kwargs: dict[str, Any] = {
         "report_text": (FIXTURES_DIR / "review-report.md")
@@ -128,7 +128,7 @@ def test_normalize_handles_both_platform_shapes() -> None:
     assert gitlab["author"] == "maintainer"
 
 
-def test_a_v2_comment_rendered_by_the_poster_is_recovered_intact() -> None:
+def test_a_v3_comment_rendered_by_the_poster_is_recovered_intact() -> None:
     module = load_recover_context()
     reviews = module.parse_review_comments([github_comment(rendered_comment())])
 
@@ -142,9 +142,28 @@ def test_a_v2_comment_rendered_by_the_poster_is_recovered_intact() -> None:
     recovered = module.extract_surviving_body(review.body)
     expected = (FIXTURES_DIR / "review-report.md").read_text(encoding="utf-8").strip()
     assert recovered == expected
+    assert "Plan: none. Deferred: none." in module.provenance_line(review)
 
 
-def test_exact_v2_key_set_is_required() -> None:
+def test_schema_2_comment_recovers_with_no_deferred_source() -> None:
+    module = load_recover_context()
+    body = (FIXTURES_DIR / "review-comment-v2.md").read_text(encoding="utf-8")
+    reviews = module.parse_review_comments([github_comment(body)])
+    assert len(reviews) == 1
+    assert reviews[0].legacy is False
+    assert "Plan: none. Deferred: none." in module.provenance_line(reviews[0])
+
+
+def test_schema_3_comment_recovers_supplied_deferred_source() -> None:
+    module = load_recover_context()
+    body = rendered_comment(deferred_source="supplied: run issue 249")
+    review = module.parse_review_comments([github_comment(body)])[0]
+    assert "Plan: none. Deferred: supplied: run issue 249." in module.provenance_line(
+        review
+    )
+
+
+def test_exact_v3_key_set_is_required() -> None:
     module = load_recover_context()
     valid = json.loads(
         (FIXTURES_DIR / "metadata-cases.json").read_text(encoding="utf-8")
@@ -191,7 +210,7 @@ def test_a_legacy_v1_review_is_history_only(
     stub_ancestry(module, monkeypatch, True)
     basis, reason = module.resolve_scope_basis(reviews)
     assert basis == "full-diff"
-    assert "no prior schema-v2 review" in reason
+    assert "no prior schema-v2/v3 review" in reason
 
 
 def test_a_v1_comment_of_another_type_is_ignored() -> None:
@@ -268,7 +287,7 @@ def test_no_prior_review_reviews_the_full_diff() -> None:
     module = load_recover_context()
     basis, reason = module.resolve_scope_basis([])
     assert basis == "full-diff"
-    assert "no prior schema-v2 review" in reason
+    assert "no prior schema-v2/v3 review" in reason
 
 
 def test_sha_is_ancestor_maps_git_exit_codes(monkeypatch: pytest.MonkeyPatch) -> None:
