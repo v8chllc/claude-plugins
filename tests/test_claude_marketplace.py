@@ -43,7 +43,7 @@ def test_marketplace_points_to_valid_plugin_manifest() -> None:
 
     manifest = load_json(plugin_root / ".claude-plugin" / "plugin.json")
     assert manifest["name"] == entry["name"]
-    assert manifest["version"] == "2.0.18"
+    assert manifest["version"] == "2.0.19"
     assert manifest["description"]
 
 
@@ -63,6 +63,7 @@ def test_all_plugin_skills_have_metadata() -> None:
     skill_files = sorted(skill_root.glob("*/SKILL.md"))
     assert {path.parent.name for path in skill_files} == {
         "consensus-review",
+        "post-merge-review",
         "recommend",
         "remember",
     }

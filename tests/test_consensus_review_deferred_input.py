@@ -25,7 +25,6 @@ def test_skill_accepts_deferred_and_routes_it_only_to_synthesizer() -> None:
     ]
     for phrase in (
         "caller-supplied `deferred` JSON text or a file path",
-        "A local review accepts a\n   `deferred` file only",
         "never recovered from PR/MR comments",
         "Only the synthesizer consumes this input",
         "non-empty string `summary` and",
@@ -33,6 +32,7 @@ def test_skill_accepts_deferred_and_routes_it_only_to_synthesizer() -> None:
         "A null or omitted repository is run-wide",
     ):
         assert phrase in inputs
+    assert "**PR/MR reference** (required)" in inputs
     assert "the `deferred` input\n   and its source" in synthesis
     assert "the reviewed repository" in synthesis
     assert "`none` when the input is absent or an\nempty array" in plan_handling
