@@ -290,3 +290,50 @@ def test_deleted_file_metadata_rejects_unsafe_or_ambiguous_paths(header: str) ->
         scope.validate_diff(diff, read)
     assert error.value.reason == "command_failed"
     assert requested == []
+
+
+@pytest.mark.parametrize("name", ["tab\tname.bin", 'tab\tquoted "雪".bin'])
+@pytest.mark.parametrize("content", [b"", b"\0binary\xff"])
+def test_gitlab_hunkless_deletion_preserves_literal_paths(
+    tmp_path: Path, name: str, content: bytes
+) -> None:
+    def runner(command: list[str], cwd: Path) -> str:
+        assert command[0] == "glab"
+        endpoint = command[command.index("GET") + 1]
+        if "/diffs?" in endpoint:
+            return json.dumps(
+                [
+                    dict(
+                        old_path=name,
+                        new_path=name,
+                        new_file=False,
+                        deleted_file=True,
+                        diff="",
+                    )
+                ]
+            )
+        if "/merge_requests/" in endpoint:
+            return json.dumps(dict(state="merged", target_branch="main"))
+        return json.dumps(dict(default_branch="main"))
+
+    _, _, diff = scope.platform_change(
+        "gitlab", "owner/repo", 12, "gitlab.com", tmp_path, runner
+    )
+    requested: list[str] = []
+
+    def read_present(path: str) -> bytes | None:
+        requested.append(path)
+        return content if path == name else None
+
+    with pytest.raises(scope.ScopeError) as error:
+        scope.validate_diff(diff, read_present)
+    assert error.value.reason == "diff_mismatch"
+    assert requested == [name]
+    requested.clear()
+
+    def read_absent(path: str) -> None:
+        requested.append(path)
+        return None
+
+    assert scope.validate_diff(diff, read_absent) == 1
+    assert requested == [name]
