@@ -226,3 +226,67 @@ def test_crlf_and_unicode_line_separators_are_literal_file_content() -> None:
     assert scope.validate_diff(diff, lambda path: b"first\r\n") == 1
     diff = diff.replace("first\r", "first\u0085second")
     assert scope.validate_diff(diff, lambda path: "first\u0085second\n".encode()) == 1
+
+
+@pytest.mark.parametrize(
+    ("name", "content", "binary_patch"),
+    [
+        ("empty.txt", b"", False),
+        ("image.bin", b"\x00binary\xff", False),
+        ("image.bin", b"\x00binary\xff", True),
+        ('space b/quoted "\u96ea"\t.bin', b"\x00binary", False),
+    ],
+)
+@pytest.mark.parametrize("quote_paths", ["true", "false"])
+def test_genuine_hunkless_deletions_check_tree_absence(
+    tmp_path: Path, name: str, content: bytes, binary_patch: bool, quote_paths: str
+) -> None:
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.email", "test@example.invalid")
+    git(tmp_path, "config", "user.name", "Test")
+    git(tmp_path, "config", "core.quotePath", quote_paths)
+    path = tmp_path / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    git(tmp_path, "add", "--", name)
+    git(tmp_path, "commit", "-m", "file before deletion")
+    git(tmp_path, "rm", "--", name)
+    args = ["git", "diff", *(["--binary"] if binary_patch else []), "HEAD"]
+    diff = subprocess.check_output(args, cwd=tmp_path, text=True)
+    assert "deleted file mode " in diff
+    assert "+++ /dev/null" not in diff
+    requested: list[str] = []
+
+    def read_present(path: str) -> bytes:
+        requested.append(path)
+        return content
+
+    with pytest.raises(scope.ScopeError) as error:
+        scope.validate_diff(diff, read_present)
+    assert error.value.reason == "diff_mismatch"
+    assert requested == [name]
+    requested.clear()
+
+    def read_absent(path: str) -> None:
+        requested.append(path)
+        return None
+
+    assert scope.validate_diff(diff, read_absent) == 1
+    assert requested == [name]
+
+
+@pytest.mark.parametrize(
+    "header", ["a/../outside b/../outside", "a//absolute b//absolute", "a/x b/y", ""]
+)
+def test_deleted_file_metadata_rejects_unsafe_or_ambiguous_paths(header: str) -> None:
+    diff = f"diff --git {header}\ndeleted file mode 100644\n"
+    requested: list[str] = []
+
+    def read(path: str) -> None:
+        requested.append(path)
+        return None
+
+    with pytest.raises(scope.ScopeError) as error:
+        scope.validate_diff(diff, read)
+    assert error.value.reason == "command_failed"
+    assert requested == []

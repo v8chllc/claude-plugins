@@ -70,7 +70,8 @@ def diff_path(value: str) -> str | None:
         return None
     if value.startswith('"'):
         try:
-            value = ast.literal_eval(value)
+            # Git quotes UTF-8 bytes; preserve literal UTF-8 when quotePath is off.
+            value = ast.literal_eval(value.encode("utf-8").decode("latin-1"))
             value = value.encode("latin-1").decode("utf-8")
         except (ValueError, SyntaxError, UnicodeError):
             raise ScopeError("command_failed", "unsupported quoted diff path") from None
@@ -79,17 +80,41 @@ def diff_path(value: str) -> str | None:
     return value[2:]
 
 
+def deleted_path(header: str) -> str:
+    """Resolve the identical old/new path in a deletion's git diff header."""
+    plain = re.fullmatch(r"a/(.+) b/\1", header)
+    if plain:
+        path = plain.group(1)
+    else:
+        quoted = re.fullmatch(r'("(?:[^"\\]|\\.)*") ("(?:[^"\\]|\\.)*")', header)
+        if not quoted:
+            raise ScopeError("command_failed", "invalid deleted-file diff header")
+        old, new = diff_path(quoted.group(1)), diff_path(quoted.group(2))
+        if old is None or old != new:
+            raise ScopeError("command_failed", "deleted-file paths disagree")
+        path = old
+    if (
+        path.startswith("/")
+        or "\0" in path
+        or any(part in ("", ".", "..") for part in path.split("/"))
+    ):
+        raise ScopeError("command_failed", "invalid deleted-file path")
+    return path
+
+
 def validate_diff(diff: str, read_file: Callable[[str], bytes | None]) -> int:
     """Check added lines and deleted files against the merge tree, not the PR head."""
     old: str | None = None
     new: str | None = None
     remaining_old = remaining_new = 0
     files = 0
+    header = ""
     for line in diff.split("\n"):
         if line.startswith("diff --git "):
             if remaining_old or remaining_new:
                 raise ScopeError("command_failed", "truncated platform diff")
             old = new = None
+            header = line.removeprefix("diff --git ")
             files += 1
         elif remaining_old or remaining_new:
             if line.startswith("+"):
@@ -110,6 +135,12 @@ def validate_diff(diff: str, read_file: Callable[[str], bytes | None]) -> int:
                 raise ScopeError("command_failed", "malformed platform diff hunk")
             if remaining_old < 0 or remaining_new < 0:
                 raise ScopeError("command_failed", "invalid platform diff hunk counts")
+        elif line.startswith("deleted file mode "):
+            path = deleted_path(header)
+            if read_file(path) is not None:
+                raise ScopeError(
+                    "diff_mismatch", f"deleted file exists at merge commit: {path}"
+                )
         elif line.startswith("--- "):
             old = diff_path(line[4:])
         elif line.startswith("+++ "):
