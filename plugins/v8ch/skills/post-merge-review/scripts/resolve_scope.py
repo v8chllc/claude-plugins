@@ -212,10 +212,13 @@ def platform_change(
                 if change.get("too_large") or change.get("collapsed"):
                     raise ScopeError("command_failed", "GitLab diff is incomplete")
                 old, new = change["old_path"], change["new_path"]
-                old_header = "/dev/null" if change["new_file"] else "a/" + old
-                new_header = "/dev/null" if change["deleted_file"] else "b/" + new
+                # Git-style quoted paths preserve tabs and other literal filename bytes.
+                old_path = json.dumps("a/" + old, ensure_ascii=False)
+                new_path = json.dumps("b/" + new, ensure_ascii=False)
+                old_header = "/dev/null" if change["new_file"] else old_path
+                new_header = "/dev/null" if change["deleted_file"] else new_path
                 chunks.append(
-                    f"diff --git a/{old} b/{new}\n"
+                    f"diff --git {old_path} {new_path}\n"
                     f"--- {old_header}\n+++ {new_header}\n{change['diff']}"
                 )
             if len(changes) < 100:
