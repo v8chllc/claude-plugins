@@ -4,7 +4,7 @@ Repairs the findings from one review cycle, validates the result with the
 repository's own quality commands, commits directly with `git`, and pushes to the
 PR/MR head branch.
 
-This workflow is PR/MR-only. A local review never fixes. It runs when the
+This workflow is PR/MR-only. It runs when the
 synthesized status is `passing` or `failing` and Step 9 of the skill did not
 return the advisory handoff. A `clean` review skips it.
 

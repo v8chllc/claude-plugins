@@ -57,11 +57,23 @@ def parity_files() -> list[Path]:
     return sorted(
         [
             *(SKILL_DIR / "scripts").glob("*.py"),
+            *(REPO_ROOT / "plugins/v8ch/skills/post-merge-review/scripts").glob("*.py"),
+            *(REPO_ROOT / "tests/fixtures/post-merge-review").glob("*.md"),
             *(SKILL_DIR / "templates").glob("*.md.tmpl"),
             *FIXTURES_DIR.glob("*.json"),
             *FIXTURES_DIR.glob("*.md"),
         ]
     )
+
+
+def test_post_merge_assets_are_explicitly_parity_tracked() -> None:
+    expected = {
+        "plugins/v8ch/skills/post-merge-review/scripts/resolve_scope.py",
+        "plugins/v8ch/skills/post-merge-review/scripts/report_contract.py",
+        "tests/fixtures/post-merge-review/report.md",
+    }
+    assert expected <= set(load_manifest())
+    assert all((REPO_ROOT / path).is_file() for path in expected)
 
 
 def load_manifest() -> dict[str, str]:

@@ -18,15 +18,13 @@ def workflow_steps() -> tuple[str, str, str]:
     )
 
 
-def test_local_route_stops_without_advisory_helper_or_fixer() -> None:
-    _, posting_step, _ = workflow_steps()
-    local_route = posting_step.split("- **No PR/MR reference:**", 1)[1].split(
-        "- **PR/MR number:**", 1
-    )[0]
-    assert "REVIEW_COMPLETE" in local_route
-    assert "stop" in local_route
-    assert "review_contract.py advisory" not in local_route
-    assert "fix-workflow.md" not in local_route
+def test_missing_reference_aborts_before_posting() -> None:
+    workflow, posting_step, _ = workflow_steps()
+    inputs = workflow.split("## Inputs\n")[1].split("## Scope ladder\n")[0]
+    assert "Without one, emit `ABORT`" in inputs
+    assert "`reason` `unsupported_scope`" in inputs
+    assert "- **No PR/MR reference:**" not in posting_step
+    assert "- **PR/MR number:**" in posting_step
 
 
 def test_advisory_route_follows_successful_post_and_precedes_fixer() -> None:
