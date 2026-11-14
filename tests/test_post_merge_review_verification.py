@@ -1,6 +1,7 @@
-"""Exercise ignored-output boundaries and bind scenario use to the shipped skill."""
+"""Exercise disposable outputs and approval-gated publication with local CLI stubs."""
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -24,7 +25,7 @@ def project(tmp_path: Path) -> Path:
     git(repo, "init", "--quiet")
     git(repo, "config", "user.name", "Synthetic")
     git(repo, "config", "user.email", "synthetic@example.invalid")
-    (repo / ".gitignore").write_text(".local/\n")
+    (repo / ".gitignore").write_text("# no output ignore setup\n")
     (repo / "source.py").write_text("value = 1\n")
     git(repo, "add", ".")
     git(repo, "commit", "--quiet", "-m", "fixture")
@@ -40,91 +41,187 @@ def helper(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def reserve(repo: Path) -> subprocess.CompletedProcess[str]:
-    return helper(
+def reserve(repo: Path) -> Path:
+    result = helper(
         repo, "prepare", "--platform", "github", "--reference", "12", "--merge", SHA
     )
+    assert result.returncode == 0, result.stdout
+    return Path(json.loads(result.stdout)["path"])
 
 
-def source_snapshot(repo: Path) -> tuple[str, str, bytes, bytes]:
+def snapshot(repo: Path) -> tuple[str, dict[str, bytes]]:
     return (
-        git(repo, "rev-parse", "HEAD"),
         git(repo, "status", "--porcelain=v1", "--untracked-files=all"),
-        (repo / "source.py").read_bytes(),
-        (repo / ".gitignore").read_bytes(),
+        {
+            str(path.relative_to(repo)): path.read_bytes()
+            for path in repo.rglob("*")
+            if path.is_file() and ".git" not in path.parts
+        },
     )
 
 
-def test_ignored_runs_are_unique_and_do_not_change_source(project: Path) -> None:
-    (project / "untracked.txt").write_text("caller draft\n")
-    backup = project / ".local/private-backup"
-    backup.parent.mkdir()
-    backup.write_bytes(b"private sentinel")
-    before = source_snapshot(project)
-    first, second = reserve(project), reserve(project)
-    assert first.returncode == second.returncode == 0
-    paths = [json.loads(result.stdout)["path"] for result in (first, second)]
-    assert paths[0] != paths[1]
-    for path in paths:
-        output = f"{path}/verification.md"
-        assert helper(project, "check", output).returncode == 0
-        with (project / output).open("x") as stream:
-            stream.write("separate verification evidence\n")
-    assert source_snapshot(project) == before
-    assert (project / "untracked.txt").read_text() == "caller draft\n"
-    assert backup.read_bytes() == b"private sentinel"
-    assert (project / paths[0] / "verification.md").read_text().startswith("separate")
+@pytest.mark.parametrize("procedure", ["Review", "Verification", "Triage", "Publish"])
+def test_external_runs_need_no_ignore_and_cleanup_all_role_files(
+    project: Path, procedure: str
+) -> None:
+    (project / "source.py").write_text("dirty caller source\n")
+    (project / "untracked.txt").write_text("caller review\n")
+    (project / "private-backup").write_bytes(b"private sentinel")
+    before = snapshot(project)
+    runs = []
+    for _ in range(2):
+        run = reserve(project)
+        runs.append(run)
+        assert run.is_absolute() and not run.is_relative_to(project)
+        try:
+            for name in (
+                "review.md",
+                "verification.md",
+                "standards.txt",
+                "correctness.txt",
+                "architecture.txt",
+                "synthesizer.txt",
+            ):
+                output = run / name
+                assert (
+                    helper(
+                        project, "check", "--run-dir", str(run), str(output)
+                    ).returncode
+                    == 0
+                )
+                with output.open("x") as stream:
+                    stream.write(f"{procedure} temporary evidence")
+            assert snapshot(project) == before
+        finally:
+            assert helper(project, "cleanup", "--run-dir", str(run)).returncode == 0
+        assert not run.exists()
+    assert runs[0] != runs[1]
+    assert snapshot(project) == before
 
 
-def test_unignored_destination_is_gap_before_any_write(project: Path) -> None:
-    (project / ".gitignore").write_text("# caller has not prepared ignores\n")
-    before = source_snapshot(project)
-    result = reserve(project)
-    assert result.returncode == 1
-    assert json.loads(result.stdout)["outcome"] == "incomplete"
-    assert "not ignored" in json.loads(result.stdout)["gap"]
-    assert not (project / ".local").exists()
-    assert source_snapshot(project) == before
-
-
-def test_each_output_is_rechecked_for_ignore_exceptions(project: Path) -> None:
-    result = reserve(project)
-    path = json.loads(result.stdout)["path"]
-    # A later caller change to ignore rules must not authorize unignored evidence.
-    (project / ".gitignore").write_text(".local/**\n!.local/**/\n!.local/**/leak.txt\n")
-    result = helper(project, "check", f"{path}/leak.txt")
-    assert result.returncode == 1
-    assert "not ignored" in result.stdout
-    assert not (project / path / "leak.txt").exists()
-
-
-def test_symlink_output_cannot_escape_to_private_backup(project: Path) -> None:
-    outside = project.parent / "private"
-    outside.mkdir()
-    sentinel = outside / "sentinel"
+@pytest.mark.parametrize("escape", ["symlink", "checkout", "parent"])
+def test_external_guard_protects_source_and_private_backup(
+    project: Path, escape: str
+) -> None:
+    run = reserve(project)
+    sentinel = project / "private-backup"
     sentinel.write_text("untouched")
-    (project / ".local").symlink_to(outside, target_is_directory=True)
-    result = reserve(project)
-    assert result.returncode == 1
-    assert "symlink" in result.stdout
-    assert sorted(path.name for path in outside.iterdir()) == ["sentinel"]
+    try:
+        if escape == "symlink":
+            (run / "link").symlink_to(project, target_is_directory=True)
+            output = run / "link/private-backup"
+        elif escape == "checkout":
+            output = sentinel
+        else:
+            output = run / "../escape"
+        assert (
+            helper(project, "check", "--run-dir", str(run), str(output)).returncode == 1
+        )
+        assert sentinel.read_text() == "untouched"
+    finally:
+        assert helper(project, "cleanup", "--run-dir", str(run)).returncode == 0
     assert sentinel.read_text() == "untouched"
 
 
-def test_tracked_output_is_rejected_even_under_ignore_rule(project: Path) -> None:
-    tracked = project / ".local/post-merge-review/existing.md"
-    tracked.parent.mkdir(parents=True)
-    tracked.write_text("tracked source")
-    git(project, "add", "--force", str(tracked))
-    result = helper(project, "check", ".local/post-merge-review/existing.md")
-    assert result.returncode == 1
-    assert "tracked source" in result.stdout
-    assert tracked.read_text() == "tracked source"
-
-
-@pytest.mark.parametrize("path", ["../escape", "/tmp/escape", ".local/other"])
-def test_output_must_stay_within_post_merge_artifacts(project: Path, path: str) -> None:
-    assert helper(project, "check", path).returncode == 1
+@pytest.mark.parametrize("platform", ["github", "gitlab"])
+@pytest.mark.parametrize(
+    "case", ["approved", "declined", "changed", "mismatch", "local-link"]
+)
+def test_publish_exact_approval_and_readback(
+    project: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    case: str,
+) -> None:
+    cli = "gh" if platform == "github" else "glab"
+    stub = tmp_path / cli
+    calls = tmp_path / "calls.jsonl"
+    payload = tmp_path / "posted.json"
+    stub.write_text(
+        "#!"
+        + sys.executable
+        + "\n"
+        + r"""
+import json, os, pathlib, sys
+args = sys.argv[1:]
+with open(os.environ["STUB_CALLS"], "a") as out:
+    out.write(json.dumps(args) + "\n")
+store = pathlib.Path(os.environ["STUB_PAYLOAD"])
+if "--input" in args:
+    data = json.loads(pathlib.Path(args[args.index("--input") + 1]).read_text())
+    store.write_text(json.dumps(data))
+    print(json.dumps({"id": 17, "html_url": "https://github.com/example/project/pull/12#issuecomment-17"}))
+else:
+    data = json.loads(store.read_text())
+    if os.environ["STUB_CASE"] == "mismatch":
+        data["body"] += "changed by platform"
+    print(json.dumps(data))
+"""
+    )
+    stub.chmod(0o700)
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setenv("STUB_CALLS", str(calls))
+    monkeypatch.setenv("STUB_PAYLOAD", str(payload))
+    monkeypatch.setenv("STUB_CASE", case)
+    before = snapshot(project)
+    run = reserve(project)
+    try:
+        text = "Complete review\n\nEvidence: synthetic pass.\n"
+        if case == "local-link":
+            text += "[evidence](./evidence.txt)\n"
+        (run / "comment.md").write_text(text)
+        args = [
+            "publish",
+            "--run-dir",
+            str(run),
+            "--platform",
+            platform,
+            "--repository",
+            "example/project",
+            "--reference",
+            "12",
+            "--text-file",
+            str(run / "comment.md"),
+        ]
+        if case != "declined":
+            (run / "approved.md").write_text(
+                text if case != "changed" else "old approved text"
+            )
+            args += ["--approved-file", str(run / "approved.md")]
+        result = helper(project, *args)
+        response = json.loads(result.stdout)
+        if case in ("declined", "changed", "local-link"):
+            assert not calls.exists()
+            assert response["outcome"] == (
+                "not_published" if case == "declined" else "incomplete"
+            )
+        else:
+            recorded = [json.loads(line) for line in calls.read_text().splitlines()]
+            assert len(recorded) == 2
+            assert recorded[0][0] == recorded[1][0] == "api"
+            assert "--input" in recorded[0] and "POST" in recorded[0]
+            assert "--input" not in recorded[1] and "POST" not in recorded[1]
+            assert json.loads(payload.read_text())["body"] == text
+            if platform == "github":
+                assert recorded[0][1] == "repos/example/project/issues/12/comments"
+                assert recorded[1][1] == "repos/example/project/issues/comments/17"
+            else:
+                assert (
+                    recorded[0][1]
+                    == "projects/example%2Fproject/merge_requests/12/notes"
+                )
+                assert recorded[1][1].endswith("/notes/17")
+            if case == "mismatch":
+                assert (
+                    result.returncode == 1 and "read-back mismatch" in response["gap"]
+                )
+            else:
+                assert result.returncode == 0 and response["outcome"] == "published"
+                assert response["url"].startswith("https://")
+    finally:
+        assert helper(project, "cleanup", "--run-dir", str(run)).returncode == 0
+    assert not run.exists() and snapshot(project) == before
 
 
 def test_procedure_binds_real_checks_and_separate_outcomes() -> None:
@@ -132,7 +229,7 @@ def test_procedure_binds_real_checks_and_separate_outcomes() -> None:
     for required in (
         "## Verification run",
         "scripts/artifacts.py",
-        "check <relative-output-path>",
+        "check --run-dir <run-dir> <absolute-output-path>",
         "before every comparison",
         "git rev-parse HEAD",
         "equals its full `merge_commit`",
@@ -166,3 +263,19 @@ def test_claim_qualification_preserves_report_and_draft_limits() -> None:
         "No action",
     ):
         assert required in skill
+
+
+def test_publish_step_requires_witnessed_exact_text_approval_and_cleanup() -> None:
+    skill = " ".join((SKILL / "SKILL.md").read_text().split())
+    publish = skill.split("## Publish")[1].split("## Review terminal signals")[0]
+    for required in (
+        "explicit sponsor approval of that exact text and destination",
+        "A helper flag or file alone never grants approval",
+        "Any text or destination change needs renewed approval",
+        "Declining or absent approval posts nothing",
+        "--approved-file <run-dir>/approved.md",
+        "read-back mismatch",
+        "never silently accept, edit, delete or retry",
+        "Remove this temporary directory on success, decline and error",
+    ):
+        assert required in publish
