@@ -5,7 +5,7 @@
     "plugins/v8ch/skills/consensus-review/scripts/recover_context.py": "f5bc1703afdff3ca06b90a51a9344c8a3abfbd07de0c0d8508c9a1dfb3abf3a6",
     "plugins/v8ch/skills/consensus-review/scripts/review_contract.py": "f261802984cbac81fdb80a9068380c96100aa60acee356ba118dfd08afe54b54",
     "plugins/v8ch/skills/consensus-review/templates/review-comment.md.tmpl": "35e6b994766175ea96b5d6f69526facc77bdf05528b7b3d72f7822d7649400ae",
-    "plugins/v8ch/skills/post-merge-review/scripts/artifacts.py": "e523a2df4fae1a6d9549ab798e0ed9f6de376ed9250700d25add99f8b7eece30",
+    "plugins/v8ch/skills/post-merge-review/scripts/artifacts.py": "4331713fbbe7bea009b553ac51b544b040cbd38d2755c911a17489c78146ed44",
     "plugins/v8ch/skills/post-merge-review/scripts/report_contract.py": "735c444a46340eaed2e499ef7ea540b62dbc00c7541cdbe82f2466a503e872cf",
     "plugins/v8ch/skills/post-merge-review/scripts/resolve_scope.py": "638e48e910f4e6de9cc18411869ac7d75866d4f748cf52778b8def5acd34cfb9",
     "tests/fixtures/consensus-review/comments-github.json": "0ace68051c0670b371cb34031e9eed358b99c40a67f12c1d42bd365ab2573875",

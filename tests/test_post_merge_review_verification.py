@@ -279,3 +279,148 @@ def test_publish_step_requires_witnessed_exact_text_approval_and_cleanup() -> No
         "Remove this temporary directory on success, decline and error",
     ):
         assert required in publish
+
+
+@pytest.mark.parametrize("platform", ["github", "gitlab"])
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param(
+            "[output][local]\n\n[local]: /tmp/evidence.txt\n", id="full-reference"
+        ),
+        pytest.param(
+            "[local][]\n\n[local]: ./evidence.txt\n", id="collapsed-reference"
+        ),
+        pytest.param("[local]\n\n[local]: ../evidence.txt\n", id="shortcut-reference"),
+        pytest.param("[local]\n\n[local]: </tmp/evidence.txt>\n", id="angle-reference"),
+        pytest.param(
+            "[local]\n\n[local]:\n /tmp/evidence.txt\n", id="multiline-reference"
+        ),
+        pytest.param(
+            "> [local]\n>\n> [local]: /tmp/evidence.txt\n", id="quoted-reference"
+        ),
+        pytest.param(
+            "- [local]\n\n  [local]: /tmp/evidence.txt\n", id="list-reference"
+        ),
+        pytest.param('<a href="./evidence.txt">output</a>\n', id="html-double-quote"),
+        pytest.param("<a href='../evidence.txt'>output</a>\n", id="html-single-quote"),
+        pytest.param("<a href=/tmp/evidence.txt>output</a>\n", id="html-unquoted"),
+        pytest.param('<A HREF="&#47;tmp/evidence.txt">output</A>\n', id="html-entity"),
+        pytest.param('<img src="./evidence.png" />\n', id="html-image"),
+        pytest.param("<file:/tmp/evidence.txt>\n", id="file-autolink"),
+    ],
+)
+def test_publish_rejects_local_link_forms_before_platform_call(
+    project: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    text: str,
+) -> None:
+    calls = tmp_path / "unexpected-calls"
+    stub = tmp_path / ("gh" if platform == "github" else "glab")
+    stub.write_text(
+        "#!" + sys.executable + "\nimport pathlib, os\n"
+        "pathlib.Path(os.environ['LINK_CALLS']).write_text('unexpected call')\n"
+        "print('{}')\n"
+    )
+    stub.chmod(0o700)
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setenv("LINK_CALLS", str(calls))
+    before = snapshot(project)
+    run = reserve(project)
+    try:
+        (run / "comment.md").write_text(text)
+        (run / "approved.md").write_text(text)
+        result = helper(
+            project,
+            "publish",
+            "--run-dir",
+            str(run),
+            "--platform",
+            platform,
+            "--repository",
+            "example/project",
+            "--reference",
+            "12",
+            "--text-file",
+            str(run / "comment.md"),
+            "--approved-file",
+            str(run / "approved.md"),
+        )
+        assert result.returncode == 1
+        assert "must not link to local files" in json.loads(result.stdout)["gap"]
+        assert not calls.exists()
+    finally:
+        assert helper(project, "cleanup", "--run-dir", str(run)).returncode == 0
+    assert not run.exists() and snapshot(project) == before
+
+
+@pytest.mark.parametrize("platform", ["github", "gitlab"])
+def test_publish_preserves_remote_link_forms_and_exact_bytes(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, platform: str
+) -> None:
+    calls = tmp_path / "calls"
+    payload = tmp_path / "payload"
+    stub = tmp_path / ("gh" if platform == "github" else "glab")
+    stub.write_text(
+        "#!"
+        + sys.executable
+        + "\n"
+        + r"""
+import json, os, pathlib, sys
+args = sys.argv[1:]
+with open(os.environ["LINK_CALLS"], "a") as stream:
+    stream.write(json.dumps(args) + "\n")
+store = pathlib.Path(os.environ["LINK_PAYLOAD"])
+if "--input" in args:
+    data = pathlib.Path(args[args.index("--input") + 1]).read_bytes()
+    store.write_bytes(data)
+    print(json.dumps({"id": 17, "html_url": "https://github.com/example/project/pull/12#issuecomment-17"}))
+else:
+    print(store.read_bytes().decode())
+"""
+    )
+    stub.chmod(0o700)
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setenv("LINK_CALLS", str(calls))
+    monkeypatch.setenv("LINK_PAYLOAD", str(payload))
+    text = (
+        "[inline](https://example.com/evidence) [angle](<https://example.com/a>)\r\n"
+        "[reference][evidence] [evidence][] [evidence] [anchor](#results)\r\n"
+        '[evidence]: https://example.com/evidence "Remote evidence"\r\n'
+        '<a href="HTTPS://example.com/evidence?a=1&amp;b=2">evidence</a>\r\n'
+        "<a href=//example.com/evidence>remote</a>\r\n"
+        '<img src="https://example.com/evidence.png" />\r\n'
+        "<https://example.com/evidence>\r\n"
+    )
+    run = reserve(project)
+    try:
+        for name in ("comment.md", "approved.md"):
+            (run / name).write_bytes(text.encode())
+        result = helper(
+            project,
+            "publish",
+            "--run-dir",
+            str(run),
+            "--platform",
+            platform,
+            "--repository",
+            "example/project",
+            "--reference",
+            "12",
+            "--text-file",
+            str(run / "comment.md"),
+            "--approved-file",
+            str(run / "approved.md"),
+        )
+        assert result.returncode == 0, result.stdout
+        assert json.loads(result.stdout)["outcome"] == "published"
+        recorded = [json.loads(line) for line in calls.read_text().splitlines()]
+        assert (
+            len(recorded) == 2 and "POST" in recorded[0] and "POST" not in recorded[1]
+        )
+        assert json.loads(payload.read_bytes())["body"].encode() == text.encode()
+    finally:
+        assert helper(project, "cleanup", "--run-dir", str(run)).returncode == 0
+    assert not run.exists()
