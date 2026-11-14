@@ -74,7 +74,14 @@ by one GET returning the same body and a usable comment URL. For GitLab use the
 notes endpoint and note anchor; for GitHub use issue comments. Repeat with
 approval declined (no CLI call), changed text (no CLI call), a local-file link
 (no CLI call), and a stub read-back body mismatch (report failure, no retry,
-edit or deletion). Inspect cleanup on every path. A file is only the helper's
+edit or deletion). Repeat local-link rejection for full, collapsed and shortcut
+Markdown references,
+angle and multiline reference definitions, definitions inside quote/list
+containers, HTML href values with double/single/no quotes and entity encoding,
+and local image sources. Reject these before any platform call. Check remote
+inline/reference/HTML/image links and anchors still post the exact approved
+bytes, including line endings. Inspect cleanup on every path. A file is only
+the helper's
 input representation: sponsor interaction supplies the authority. No fixture
 alone establishes the conversational approval gate; exercise the skill step.
 

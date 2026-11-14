@@ -12,8 +12,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from html import unescape
+from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 
 def guard(root: Path, run: Path, output: Path) -> None:
@@ -59,6 +61,50 @@ def api(
     return value
 
 
+class HTMLLinks(HTMLParser):
+    """Collect rendered HTML link and image destinations, including entities."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.targets: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.targets.extend(
+            value
+            for name, value in attrs
+            if name in ("href", "src") and value is not None
+        )
+
+
+def reject_local_links(text: str) -> None:
+    """Check inline, reference, autolink and HTML destinations before posting."""
+    # Every reference form resolves through a definition; inspect definitions even
+    # when unused rather than risk publishing an inaccessible evidence destination.
+    destination = r"(<[^>\n]*>|[^\s)]+)"
+    targets = re.findall(r"\]\(\s*" + destination, text)
+    targets += re.findall(
+        r"(?m)^[ \t]*(?:(?:>[ \t]*|(?:[-+*]|\d+[.)])[ \t]+)[ \t]*)*"
+        r"\[(?:\\.|[^\]\\])+\]:[ \t]*(?:\n[ \t]*(?:>[ \t]*)*)?" + destination,
+        text,
+    )
+    targets += re.findall(r"<([A-Za-z][A-Za-z0-9+.-]*:[^<>\s]+)>", text)
+    html = HTMLLinks()
+    html.feed(text)
+    html.close()
+    targets += html.targets
+    for target in targets:
+        target = unescape(target.removeprefix("<").removesuffix(">"))
+        # CommonMark permits backslash escapes for ASCII punctuation in URLs.
+        target = re.sub(r"\\([!\"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~])", r"\1", target)
+        parsed = urlsplit(target)
+        remote = parsed.scheme.lower() in ("http", "https") and bool(parsed.netloc)
+        remote = remote or (target.startswith("//") and bool(parsed.netloc))
+        if not remote and not target.startswith("#"):
+            raise ValueError("posted text must not link to local files")
+    if re.search(r"\bfile:", text, re.IGNORECASE):
+        raise ValueError("posted text must not link to local files")
+
+
 def publish(
     root: Path,
     run: Path,
@@ -76,11 +122,7 @@ def publish(
     text = text_file.read_bytes().decode("utf-8")
     if text_file.read_bytes() != approved_file.read_bytes() or not text.strip():
         raise ValueError("publication text differs from explicitly approved text")
-    for target in re.findall(r"\[[^\]]*\]\(([^)]+)\)", text):
-        if not target.startswith(("https://", "http://", "#")):
-            raise ValueError("posted text must not link to local files")
-    if "file://" in text:
-        raise ValueError("posted text must not link to local files")
+    reject_local_links(text)
     if reference < 1 or not re.fullmatch(r"[^/\s]+(?:/[^/\s]+)+", repository):
         raise ValueError("invalid repository or reference")
     cli = "gh" if platform == "github" else "glab"
