@@ -3,54 +3,116 @@
 # requires-python = ">=3.12"
 # dependencies = []
 # ///
-"""Reserve ignored post-merge outputs without changing source or ignore rules."""
+"""Manage disposable external evidence and explicitly approved publication."""
 
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
-import uuid
+import tempfile
 from pathlib import Path
-
-BASE = Path(".local/post-merge-review")
-
-
-def git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", "-C", str(root), *args], capture_output=True, text=True, check=False
-    )
+from urllib.parse import quote
 
 
-def guard(root: Path, relative: Path) -> None:
-    if relative.is_absolute() or ".." in relative.parts:
-        raise ValueError("output must be a repository-relative path without '..'")
-    if not relative.is_relative_to(BASE) or relative == BASE:
-        raise ValueError("output must be beneath .local/post-merge-review/")
-    path = root
-    for part in relative.parts:
+def guard(root: Path, run: Path, output: Path) -> None:
+    if not run.is_absolute() or run.is_symlink():
+        raise ValueError("run directory must be an absolute, isolated directory")
+    resolved = run.resolve(strict=True)
+    if resolved.is_relative_to(root) or not run.name.startswith("post-merge-review-"):
+        raise ValueError("run directory must be outside the reviewed checkout")
+    if (
+        not output.is_absolute()
+        or not output.is_relative_to(run)
+        or ".." in output.parts
+    ):
+        raise ValueError("output must stay within the supplied run directory")
+    path = run
+    for part in output.relative_to(run).parts:
         path /= part
         if path.is_symlink():
             raise ValueError("output path must not traverse a symlink")
-    tracked = git(root, "ls-files", "--", relative.as_posix())
-    if tracked.returncode or tracked.stdout:
-        raise ValueError("output path contains tracked source")
-    ignored = git(root, "check-ignore", "--quiet", "--", relative.as_posix())
-    if ignored.returncode:
-        raise ValueError(f"setup gap: {relative.as_posix()} is not ignored")
 
 
 def prepare(root: Path, platform: str, reference: int, merge: str) -> Path:
     if reference < 1 or not re.fullmatch(r"[0-9a-f]{40}", merge):
         raise ValueError("reference must be positive and merge must be a full SHA")
-    relative = BASE / f"{platform}-{reference}" / merge / uuid.uuid4().hex
-    # Check before mkdir, and again for every actual output before it is written.
-    guard(root, relative)
-    for name in ("review.md", "verification.md", "evidence.txt"):
-        guard(root, relative / name)
-    (root / relative.parent).mkdir(parents=True, exist_ok=True)
-    (root / relative).mkdir(mode=0o700, exist_ok=False)
-    return relative
+    parent = Path(tempfile.gettempdir()).resolve()
+    if parent.is_relative_to(root):
+        raise ValueError("temporary directory must be outside the reviewed checkout")
+    return Path(tempfile.mkdtemp(prefix=f"post-merge-review-{platform}-{reference}-"))
+
+
+def api(
+    cli: str, endpoint: str, payload: Path | None = None, hostname: str | None = None
+) -> dict[str, object]:
+    command = [cli, "api", endpoint]
+    if hostname:
+        command += ["--hostname", hostname]
+    if payload is not None:
+        command += ["--method", "POST", "--input", str(payload)]
+    result = subprocess.run(command, capture_output=True, text=True, check=True)
+    value = json.loads(result.stdout)
+    if not isinstance(value, dict):
+        raise ValueError("platform returned a malformed comment")
+    return value
+
+
+def publish(
+    root: Path,
+    run: Path,
+    platform: str,
+    repository: str,
+    reference: int,
+    text_file: Path,
+    approved_file: Path | None,
+    hostname: str,
+) -> dict[str, object]:
+    guard(root, run, text_file)
+    if approved_file is None:
+        return {"outcome": "not_published", "reason": "exact text was not approved"}
+    guard(root, run, approved_file)
+    text = text_file.read_bytes().decode("utf-8")
+    if text_file.read_bytes() != approved_file.read_bytes() or not text.strip():
+        raise ValueError("publication text differs from explicitly approved text")
+    for target in re.findall(r"\[[^\]]*\]\(([^)]+)\)", text):
+        if not target.startswith(("https://", "http://", "#")):
+            raise ValueError("posted text must not link to local files")
+    if "file://" in text:
+        raise ValueError("posted text must not link to local files")
+    if reference < 1 or not re.fullmatch(r"[^/\s]+(?:/[^/\s]+)+", repository):
+        raise ValueError("invalid repository or reference")
+    cli = "gh" if platform == "github" else "glab"
+    endpoint = (
+        f"repos/{repository}/issues/{reference}/comments"
+        if platform == "github"
+        else f"projects/{quote(repository, safe='')}/merge_requests/{reference}/notes"
+    )
+    payload = run / "publish.json"
+    guard(root, run, payload)
+    with payload.open("x", encoding="utf-8") as stream:
+        json.dump({"body": text}, stream)
+    posted = api(cli, endpoint, payload, hostname)
+    comment_id = posted.get("id")
+    if type(comment_id) is not int:
+        raise ValueError("post returned no comment identity; do not retry")
+    read_endpoint = (
+        f"repos/{repository}/issues/comments/{comment_id}"
+        if platform == "github"
+        else f"{endpoint}/{comment_id}"
+    )
+    readback = api(cli, read_endpoint, hostname=hostname)
+    if readback.get("body") != text:
+        raise ValueError("posted body read-back mismatch; do not edit, delete or retry")
+    url = (
+        posted.get("html_url")
+        if platform == "github"
+        else f"https://{hostname}/{repository}/-/merge_requests/{reference}#note_{comment_id}"
+    )
+    if not isinstance(url, str) or not url.startswith("https://"):
+        raise ValueError("post returned no comment URL; do not retry")
+    return {"outcome": "published", "url": url}
 
 
 def main() -> int:
@@ -61,22 +123,57 @@ def main() -> int:
     reserve.add_argument("--platform", required=True, choices=("github", "gitlab"))
     reserve.add_argument("--reference", required=True, type=int)
     reserve.add_argument("--merge", required=True)
-    check = commands.add_parser("check")
-    check.add_argument("path", type=Path)
+    for name in ("check", "cleanup", "publish"):
+        command = commands.add_parser(name)
+        command.add_argument("--run-dir", required=True, type=Path)
+        if name == "check":
+            command.add_argument("path", type=Path)
+        if name == "publish":
+            command.add_argument(
+                "--platform", required=True, choices=("github", "gitlab")
+            )
+            command.add_argument("--repository", required=True)
+            command.add_argument("--reference", required=True, type=int)
+            command.add_argument("--text-file", required=True, type=Path)
+            command.add_argument("--approved-file", type=Path)
+            command.add_argument("--hostname")
     args = parser.parse_args()
     try:
         root = args.repo_dir.resolve(strict=True)
-        resolved = git(root, "rev-parse", "--show-toplevel")
-        if resolved.returncode or Path(resolved.stdout.strip()).resolve() != root:
+        resolved = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if Path(resolved.stdout.strip()).resolve() != root:
             raise ValueError("repo-dir must name the Git repository root")
         if args.command == "prepare":
-            relative = prepare(root, args.platform, args.reference, args.merge)
+            result: dict[str, object] = {
+                "outcome": "ready",
+                "path": str(prepare(root, args.platform, args.reference, args.merge)),
+            }
+        elif args.command == "publish":
+            result = publish(
+                root,
+                args.run_dir,
+                args.platform,
+                args.repository,
+                args.reference,
+                args.text_file,
+                args.approved_file,
+                args.hostname
+                or ("github.com" if args.platform == "github" else "gitlab.com"),
+            )
         else:
-            relative = args.path
-            guard(root, relative)
-        print(json.dumps({"outcome": "ready", "path": relative.as_posix()}))
+            output = args.path if args.command == "check" else args.run_dir
+            guard(root, args.run_dir, output)
+            if args.command == "cleanup":
+                shutil.rmtree(args.run_dir)
+            result = {"outcome": "ready", "path": str(output)}
+        print(json.dumps(result))
         return 0
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
         print(json.dumps({"outcome": "incomplete", "gap": str(exc)}))
         return 1
 

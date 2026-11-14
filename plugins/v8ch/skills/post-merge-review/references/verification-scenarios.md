@@ -6,8 +6,8 @@ follows SKILL.md, chooses the verdict from inspected evidence and returns the
 actual report, signal and qualified draft. Automated checks of wording alone do
 not establish these behaviors.
 
-Prepare a disposable Git project outside any product checkout. The caller adds
-`.local/` to that project's `.gitignore`, commits a `sample.py` containing:
+Prepare a disposable Git project outside any product checkout. Use no output ignore rule and require no output-location setup. The caller
+commits a `sample.py` containing:
 
 ```python
 def render(rows):
@@ -34,7 +34,7 @@ Use the current Python executable for these selected commands from the project:
 | contradicted impact | `from sample import render; assert render([1]) == 1; print('nonempty input succeeds')` | diagnostic; disproves “every input raises” only |
 
 Prevent Python bytecode writes with `PYTHONDONTWRITEBYTECODE=1`, and direct any
-other generated evidence into the reserved ignored run. For a finding-bearing
+other generated evidence into the reserved external temporary run. For a finding-bearing
 report the passing command alone leaves that finding's untested clauses
 unverified, hence incomplete. Also exercise a valid clean review with no
 findings and the passing command: that case can be passed. The failing and
@@ -53,18 +53,34 @@ missing prerequisite, started=false and no exit result. Reuse the prepared
 workspace for the available checks with explicit caller authorization; no fresh
 checkout or environment is required.
 
-For artifacts, snapshot tracked and untracked source and their bytes, retain a
-private ignored backup sentinel outside the output subtree, and run the skill's
-artifact helper before any report writes. Repeat at the same merge and confirm
-different output directories and unchanged earlier evidence. In a second
-project without an ignore rule, reservation must fail before `.local` is
-created; return the setup gap in chat. Never edit that project's ignore rules
-as part of the procedure. Also exercise a symlinked output and an ignore
-exception for an actual output; both must be rejected before a write.
+For artifacts, snapshot tracked and untracked source bytes and `.gitignore`,
+retain a private-backup sentinel, and run the artifact helper before temporary
+writes. Exercise Review, Verification, Triage and Publish with no output ignore
+rule. Give every delegated reviewer and synthesizer the actual external run
+directory and exclusive-output checks; inspect role evidence there. Return full
+reports in conversation, then settle roles and clean up the directory, including
+abort/decline/error paths. Repeat at the same merge and confirm unique temporary
+directories, their absence afterward, and unchanged source and sentinel bytes.
+Supply the returned review later from conversation, a comment and a caller file;
+no procedure relies on a retained local report. Test rejection of symlink and
+parent escapes without modifying the target. Do not change ignore rules.
+
+For Publish, use recording stub `gh` and `glab` executables first on PATH; never
+post validation evidence to a real platform. Present the exact complete comment
+and destination; simulate explicit sponsor approval and only then create the
+helper's temporary approved-text copy. Run Publish, capture stub arguments and
+JSON input, and assert one POST containing exactly the approved text followed
+by one GET returning the same body and a usable comment URL. For GitLab use the
+notes endpoint and note anchor; for GitHub use issue comments. Repeat with
+approval declined (no CLI call), changed text (no CLI call), a local-file link
+(no CLI call), and a stub read-back body mismatch (report failure, no retry,
+edit or deletion). Inspect cleanup on every path. A file is only the helper's
+input representation: sponsor interaction supplies the authority. No fixture
+alone establishes the conversational approval gate; exercise the skill step.
 
 Record every command, actual output/exit status, report byte comparison,
 source/environment/private-backup comparison and resulting signal. For paired
 ports compare baseline definitions with baseline definitions, then head
 definitions and this same scenario matrix at both heads. Identify all four
 commits and only necessary role/path wiring differences. This recipe needs no
-platform calls, installation, publication, filing or product fixes.
+platform calls, installation, real publication, filing or product fixes.
