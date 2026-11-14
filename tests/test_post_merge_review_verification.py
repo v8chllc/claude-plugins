@@ -1,7 +1,8 @@
-"""Exercise disposable outputs and approval-gated publication with local CLI stubs."""
+"""Exercise shipped temporary-directory and direct posting instructions."""
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -10,8 +11,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "plugins/v8ch/skills/post-merge-review"
-HELPER = SKILL / "scripts/artifacts.py"
-SHA = "0" * 40
+
+
+def text() -> str:
+    return (SKILL / "SKILL.md").read_text()
 
 
 def git(repo: Path, *args: str) -> str:
@@ -32,23 +35,6 @@ def project(tmp_path: Path) -> Path:
     return repo
 
 
-def helper(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(HELPER), "--repo-dir", str(repo), *args],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-
-def reserve(repo: Path) -> Path:
-    result = helper(
-        repo, "prepare", "--platform", "github", "--reference", "12", "--merge", SHA
-    )
-    assert result.returncode == 0, result.stdout
-    return Path(json.loads(result.stdout)["path"])
-
-
 def snapshot(repo: Path) -> tuple[str, dict[str, bytes]]:
     return (
         git(repo, "status", "--porcelain=v1", "--untracked-files=all"),
@@ -60,17 +46,29 @@ def snapshot(repo: Path) -> tuple[str, dict[str, bytes]]:
     )
 
 
-@pytest.mark.parametrize("procedure", ["Review", "Verification", "Triage", "Publish"])
+@pytest.mark.parametrize("procedure", ["Review", "Verification", "Triage"])
 def test_external_runs_need_no_ignore_and_cleanup_all_role_files(
-    project: Path, procedure: str
+    project: Path, tmp_path: Path, procedure: str
 ) -> None:
+    skill = text()
+    assert "create one directory with `mktemp -d` outside" in skill
+    assert 'remove its directory with `rm -r -- "<run-dir>"`' in skill
     (project / "source.py").write_text("dirty caller source\n")
     (project / "untracked.txt").write_text("caller review\n")
     (project / "private-backup").write_bytes(b"private sentinel")
     before = snapshot(project)
     runs = []
     for _ in range(2):
-        run = reserve(project)
+        # Execute the literal shipped creation command in a caller-prepared
+        # external TMPDIR; no checkout output rule or helper participates.
+        run = Path(
+            subprocess.check_output(
+                ["sh", "-c", "mktemp -d"],
+                cwd=project,
+                env={**os.environ, "TMPDIR": str(tmp_path)},
+                text=True,
+            ).strip()
+        )
         runs.append(run)
         assert run.is_absolute() and not run.is_relative_to(project)
         try:
@@ -82,62 +80,48 @@ def test_external_runs_need_no_ignore_and_cleanup_all_role_files(
                 "architecture.txt",
                 "synthesizer.txt",
             ):
-                output = run / name
-                assert (
-                    helper(
-                        project, "check", "--run-dir", str(run), str(output)
-                    ).returncode
-                    == 0
-                )
-                with output.open("x") as stream:
-                    stream.write(f"{procedure} temporary evidence")
+                (run / name).write_text(f"{procedure} temporary evidence")
             assert snapshot(project) == before
         finally:
-            assert helper(project, "cleanup", "--run-dir", str(run)).returncode == 0
+            subprocess.run(["rm", "-r", "--", str(run)], check=True)
         assert not run.exists()
     assert runs[0] != runs[1]
     assert snapshot(project) == before
 
 
-@pytest.mark.parametrize("escape", ["symlink", "checkout", "parent"])
-def test_external_guard_protects_source_and_private_backup(
-    project: Path, escape: str
-) -> None:
-    run = reserve(project)
-    sentinel = project / "private-backup"
-    sentinel.write_text("untouched")
-    try:
-        if escape == "symlink":
-            (run / "link").symlink_to(project, target_is_directory=True)
-            output = run / "link/private-backup"
-        elif escape == "checkout":
-            output = sentinel
-        else:
-            output = run / "../escape"
-        assert (
-            helper(project, "check", "--run-dir", str(run), str(output)).returncode == 1
-        )
-        assert sentinel.read_text() == "untouched"
-    finally:
-        assert helper(project, "cleanup", "--run-dir", str(run)).returncode == 0
-    assert sentinel.read_text() == "untouched"
-
-
+@pytest.mark.parametrize("procedure", ["Review", "Verification"])
 @pytest.mark.parametrize("platform", ["github", "gitlab"])
-@pytest.mark.parametrize(
-    "case", ["approved", "declined", "changed", "mismatch", "local-link"]
-)
-def test_publish_exact_approval_and_readback(
+@pytest.mark.parametrize("post_fails", [False, True])
+def test_direct_report_posting_uses_one_cli_call_and_returns_url(
     project: Path,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    procedure: str,
     platform: str,
-    case: str,
+    post_fails: bool,
 ) -> None:
+    skill = text()
+    assert (
+        "approval step, posting-text parsing, filtering, link scanning or read-back"
+        in (" ".join(skill.split()))
+    )
+    section = skill.split(f"## {procedure} run\n")[1].split("\n## ")[0]
+    assert "Post the" in section and "comment URL" in section
     cli = "gh" if platform == "github" else "glab"
-    stub = tmp_path / cli
+    example = next(
+        command
+        for command in re.findall(r"```bash\n(.*?)\n```", skill, re.DOTALL)
+        if command.startswith(cli + " ")
+    )
     calls = tmp_path / "calls.jsonl"
-    payload = tmp_path / "posted.json"
+    payload = tmp_path / "posted.txt"
+    stub = tmp_path / cli
+    anchor = (
+        "pull/12#issuecomment-17"
+        if platform == "github"
+        else "-/merge_requests/12#note_17"
+    )
+    url = f"https://{platform}.com/example/project/{anchor}"
     stub.write_text(
         "#!"
         + sys.executable
@@ -147,89 +131,68 @@ import json, os, pathlib, sys
 args = sys.argv[1:]
 with open(os.environ["STUB_CALLS"], "a") as out:
     out.write(json.dumps(args) + "\n")
-store = pathlib.Path(os.environ["STUB_PAYLOAD"])
-if "--input" in args:
-    data = json.loads(pathlib.Path(args[args.index("--input") + 1]).read_text())
-    store.write_text(json.dumps(data))
-    print(json.dumps({"id": 17, "html_url": "https://github.com/example/project/pull/12#issuecomment-17"}))
+if args[:2] == ["pr", "comment"]:
+    body = pathlib.Path(args[args.index("--body-file") + 1]).read_bytes()
 else:
-    data = json.loads(store.read_text())
-    if os.environ["STUB_CASE"] == "mismatch":
-        data["body"] += "changed by platform"
-    print(json.dumps(data))
+    assert args[:3] == ["mr", "note", "create"], args
+    assert "--resolvable=false" in args
+    body = sys.stdin.buffer.read()
+pathlib.Path(os.environ["STUB_PAYLOAD"]).write_bytes(body)
+if os.environ["STUB_FAIL"] == "True":
+    print("synthetic posting unavailable", file=sys.stderr)
+    sys.exit(1)
+print(os.environ["STUB_URL"])
 """
     )
     stub.chmod(0o700)
     monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
     monkeypatch.setenv("STUB_CALLS", str(calls))
     monkeypatch.setenv("STUB_PAYLOAD", str(payload))
-    monkeypatch.setenv("STUB_CASE", case)
+    monkeypatch.setenv("STUB_FAIL", str(post_fails))
+    monkeypatch.setenv("STUB_URL", url)
     before = snapshot(project)
-    run = reserve(project)
+    run = Path(
+        subprocess.check_output(
+            ["sh", "-c", "mktemp -d"],
+            env={**os.environ, "TMPDIR": str(tmp_path)},
+            text=True,
+        ).strip()
+    )
     try:
-        text = "Complete review\n\nEvidence: synthetic pass.\n"
-        if case == "local-link":
-            text += "[evidence](./evidence.txt)\n"
-        (run / "comment.md").write_text(text)
-        args = [
-            "publish",
-            "--run-dir",
-            str(run),
-            "--platform",
-            platform,
-            "--repository",
-            "example/project",
-            "--reference",
-            "12",
-            "--text-file",
-            str(run / "comment.md"),
-        ]
-        if case != "declined":
-            (run / "approved.md").write_text(
-                text if case != "changed" else "old approved text"
-            )
-            args += ["--approved-file", str(run / "approved.md")]
-        result = helper(project, *args)
-        response = json.loads(result.stdout)
-        if case in ("declined", "changed", "local-link"):
-            assert not calls.exists()
-            assert response["outcome"] == (
-                "not_published" if case == "declined" else "incomplete"
-            )
-        else:
-            recorded = [json.loads(line) for line in calls.read_text().splitlines()]
-            assert len(recorded) == 2
-            assert recorded[0][0] == recorded[1][0] == "api"
-            assert "--input" in recorded[0] and "POST" in recorded[0]
-            assert "--input" not in recorded[1] and "POST" not in recorded[1]
-            assert json.loads(payload.read_text())["body"] == text
-            if platform == "github":
-                assert recorded[0][1] == "repos/example/project/issues/12/comments"
-                assert recorded[1][1] == "repos/example/project/issues/comments/17"
-            else:
-                assert (
-                    recorded[0][1]
-                    == "projects/example%2Fproject/merge_requests/12/notes"
-                )
-                assert recorded[1][1].endswith("/notes/17")
-            if case == "mismatch":
-                assert (
-                    result.returncode == 1 and "read-back mismatch" in response["gap"]
-                )
-            else:
-                assert result.returncode == 0 and response["outcome"] == "published"
-                assert response["url"].startswith("https://")
+        # The instruction posts the produced report, with no parsing or gate.
+        # Include syntax formerly filtered by the removed publication helper.
+        report = (
+            b"Complete report\r\nFile: sample.py\r\n"
+            b"[local]\r\n[local]:\r\n /tmp/evidence.txt\r\n"
+            b'<a href="./evidence.txt">evidence</a>\r\n'
+        )
+        report_file = "review.md" if procedure == "Review" else "verification.md"
+        (run / report_file).write_bytes(report)
+        command = (
+            example.replace("<reviewed-pr-url>", url.split("#")[0])
+            .replace("<reviewed-mr-url>", url.split("#")[0])
+            .replace("<run-dir>", str(run))
+            .replace("<report-file>", report_file)
+        )
+        result = subprocess.run(
+            ["sh", "-c", command], cwd=project, capture_output=True, text=True
+        )
+        assert result.returncode == int(post_fails)
+        assert result.stdout.strip() == ("" if post_fails else url)
+        assert ("synthetic posting unavailable" in result.stderr) == post_fails
+        recorded = [json.loads(line) for line in calls.read_text().splitlines()]
+        assert len(recorded) == 1
+        assert url.split("#")[0] in recorded[0]
+        assert payload.read_bytes() == report
     finally:
-        assert helper(project, "cleanup", "--run-dir", str(run)).returncode == 0
+        subprocess.run(["rm", "-r", "--", str(run)], check=True)
     assert not run.exists() and snapshot(project) == before
 
 
 def test_procedure_binds_real_checks_and_separate_outcomes() -> None:
-    skill = " ".join((SKILL / "SKILL.md").read_text().split())
+    skill = " ".join(text().split())
     for required in (
         "## Verification run",
-        "scripts/artifacts.py",
-        "check --run-dir <run-dir> <absolute-output-path>",
         "before every comparison",
         "git rev-parse HEAD",
         "equals its full `merge_commit`",
@@ -249,7 +212,7 @@ def test_procedure_binds_real_checks_and_separate_outcomes() -> None:
 
 
 def test_claim_qualification_preserves_report_and_draft_limits() -> None:
-    skill = " ".join((SKILL / "SKILL.md").read_text().split())
+    skill = " ".join(text().split())
     for required in (
         "split failure and impact clauses",
         "`reproduced`, `contradicted` or `unverified`",
@@ -265,162 +228,10 @@ def test_claim_qualification_preserves_report_and_draft_limits() -> None:
         assert required in skill
 
 
-def test_publish_step_requires_witnessed_exact_text_approval_and_cleanup() -> None:
-    skill = " ".join((SKILL / "SKILL.md").read_text().split())
-    publish = skill.split("## Publish")[1].split("## Review terminal signals")[0]
-    for required in (
-        "explicit sponsor approval of that exact text and destination",
-        "A helper flag or file alone never grants approval",
-        "Any text or destination change needs renewed approval",
-        "Declining or absent approval posts nothing",
-        "--approved-file <run-dir>/approved.md",
-        "read-back mismatch",
-        "never silently accept, edit, delete or retry",
-        "Remove this temporary directory on success, decline and error",
-    ):
-        assert required in publish
-
-
-@pytest.mark.parametrize("platform", ["github", "gitlab"])
-@pytest.mark.parametrize(
-    "text",
-    [
-        pytest.param(
-            "[output][local]\n\n[local]: /tmp/evidence.txt\n", id="full-reference"
-        ),
-        pytest.param(
-            "[local][]\n\n[local]: ./evidence.txt\n", id="collapsed-reference"
-        ),
-        pytest.param("[local]\n\n[local]: ../evidence.txt\n", id="shortcut-reference"),
-        pytest.param("[local]\n\n[local]: </tmp/evidence.txt>\n", id="angle-reference"),
-        pytest.param(
-            "[local]\n\n[local]:\n /tmp/evidence.txt\n", id="multiline-reference"
-        ),
-        pytest.param(
-            "> [local]\n>\n> [local]: /tmp/evidence.txt\n", id="quoted-reference"
-        ),
-        pytest.param(
-            "- [local]\n\n  [local]: /tmp/evidence.txt\n", id="list-reference"
-        ),
-        pytest.param('<a href="./evidence.txt">output</a>\n', id="html-double-quote"),
-        pytest.param("<a href='../evidence.txt'>output</a>\n", id="html-single-quote"),
-        pytest.param("<a href=/tmp/evidence.txt>output</a>\n", id="html-unquoted"),
-        pytest.param('<A HREF="&#47;tmp/evidence.txt">output</A>\n', id="html-entity"),
-        pytest.param('<img src="./evidence.png" />\n', id="html-image"),
-        pytest.param("<file:/tmp/evidence.txt>\n", id="file-autolink"),
-    ],
-)
-def test_publish_rejects_local_link_forms_before_platform_call(
-    project: Path,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    platform: str,
-    text: str,
-) -> None:
-    calls = tmp_path / "unexpected-calls"
-    stub = tmp_path / ("gh" if platform == "github" else "glab")
-    stub.write_text(
-        "#!" + sys.executable + "\nimport pathlib, os\n"
-        "pathlib.Path(os.environ['LINK_CALLS']).write_text('unexpected call')\n"
-        "print('{}')\n"
-    )
-    stub.chmod(0o700)
-    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
-    monkeypatch.setenv("LINK_CALLS", str(calls))
-    before = snapshot(project)
-    run = reserve(project)
-    try:
-        (run / "comment.md").write_text(text)
-        (run / "approved.md").write_text(text)
-        result = helper(
-            project,
-            "publish",
-            "--run-dir",
-            str(run),
-            "--platform",
-            platform,
-            "--repository",
-            "example/project",
-            "--reference",
-            "12",
-            "--text-file",
-            str(run / "comment.md"),
-            "--approved-file",
-            str(run / "approved.md"),
-        )
-        assert result.returncode == 1
-        assert "must not link to local files" in json.loads(result.stdout)["gap"]
-        assert not calls.exists()
-    finally:
-        assert helper(project, "cleanup", "--run-dir", str(run)).returncode == 0
-    assert not run.exists() and snapshot(project) == before
-
-
-@pytest.mark.parametrize("platform", ["github", "gitlab"])
-def test_publish_preserves_remote_link_forms_and_exact_bytes(
-    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, platform: str
-) -> None:
-    calls = tmp_path / "calls"
-    payload = tmp_path / "payload"
-    stub = tmp_path / ("gh" if platform == "github" else "glab")
-    stub.write_text(
-        "#!"
-        + sys.executable
-        + "\n"
-        + r"""
-import json, os, pathlib, sys
-args = sys.argv[1:]
-with open(os.environ["LINK_CALLS"], "a") as stream:
-    stream.write(json.dumps(args) + "\n")
-store = pathlib.Path(os.environ["LINK_PAYLOAD"])
-if "--input" in args:
-    data = pathlib.Path(args[args.index("--input") + 1]).read_bytes()
-    store.write_bytes(data)
-    print(json.dumps({"id": 17, "html_url": "https://github.com/example/project/pull/12#issuecomment-17"}))
-else:
-    print(store.read_bytes().decode())
-"""
-    )
-    stub.chmod(0o700)
-    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
-    monkeypatch.setenv("LINK_CALLS", str(calls))
-    monkeypatch.setenv("LINK_PAYLOAD", str(payload))
-    text = (
-        "[inline](https://example.com/evidence) [angle](<https://example.com/a>)\r\n"
-        "[reference][evidence] [evidence][] [evidence] [anchor](#results)\r\n"
-        '[evidence]: https://example.com/evidence "Remote evidence"\r\n'
-        '<a href="HTTPS://example.com/evidence?a=1&amp;b=2">evidence</a>\r\n'
-        "<a href=//example.com/evidence>remote</a>\r\n"
-        '<img src="https://example.com/evidence.png" />\r\n'
-        "<https://example.com/evidence>\r\n"
-    )
-    run = reserve(project)
-    try:
-        for name in ("comment.md", "approved.md"):
-            (run / name).write_bytes(text.encode())
-        result = helper(
-            project,
-            "publish",
-            "--run-dir",
-            str(run),
-            "--platform",
-            platform,
-            "--repository",
-            "example/project",
-            "--reference",
-            "12",
-            "--text-file",
-            str(run / "comment.md"),
-            "--approved-file",
-            str(run / "approved.md"),
-        )
-        assert result.returncode == 0, result.stdout
-        assert json.loads(result.stdout)["outcome"] == "published"
-        recorded = [json.loads(line) for line in calls.read_text().splitlines()]
-        assert (
-            len(recorded) == 2 and "POST" in recorded[0] and "POST" not in recorded[1]
-        )
-        assert json.loads(payload.read_bytes())["body"].encode() == text.encode()
-    finally:
-        assert helper(project, "cleanup", "--run-dir", str(run)).returncode == 0
-    assert not run.exists()
+def test_no_temporary_file_or_posting_helper() -> None:
+    skill = text()
+    assert not (SKILL / "scripts/artifacts.py").exists()
+    assert "## Publish\n" not in skill
+    assert "scripts/artifacts.py" not in skill
+    assert "--approved-file" not in skill
+    assert "There is no posting helper" in skill
