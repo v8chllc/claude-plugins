@@ -52,7 +52,7 @@ def test_external_runs_need_no_ignore_and_cleanup_all_role_files(
 ) -> None:
     skill = text()
     assert "create one directory with `mktemp -d` outside" in skill
-    assert 'remove its directory with `rm -r -- "<run-dir>"`' in skill
+    assert '`rm -r -- "<run-dir>"`' in skill
     (project / "source.py").write_text("dirty caller source\n")
     (project / "untracked.txt").write_text("caller review\n")
     (project / "private-backup").write_bytes(b"private sentinel")
@@ -106,7 +106,7 @@ def test_direct_report_posting_uses_one_cli_call_and_returns_url(
         in (" ".join(skill.split()))
     )
     section = skill.split(f"## {procedure} run\n")[1].split("\n## ")[0]
-    assert "Post the" in section and "comment URL" in section
+    assert "Report comments" in section and "comment URL" in section
     cli = "gh" if platform == "github" else "glab"
     example = next(
         command
@@ -134,8 +134,8 @@ with open(os.environ["STUB_CALLS"], "a") as out:
 if args[:2] == ["pr", "comment"]:
     body = pathlib.Path(args[args.index("--body-file") + 1]).read_bytes()
 else:
-    assert args[:3] == ["mr", "note", "create"], args
-    assert "--resolvable=false" in args
+    assert args[:3] == ["mr", "note", "12"], args
+    assert args[3:] == ["--repo", "https://gitlab.com/example/project"], args
     body = sys.stdin.buffer.read()
 pathlib.Path(os.environ["STUB_PAYLOAD"]).write_bytes(body)
 if os.environ["STUB_FAIL"] == "True":
@@ -170,7 +170,8 @@ print(os.environ["STUB_URL"])
         (run / report_file).write_bytes(report)
         command = (
             example.replace("<reviewed-pr-url>", url.split("#")[0])
-            .replace("<reviewed-mr-url>", url.split("#")[0])
+            .replace("<reviewed-project-url>", "https://gitlab.com/example/project")
+            .replace("<mr-iid>", "12")
             .replace("<run-dir>", str(run))
             .replace("<report-file>", report_file)
         )
@@ -182,7 +183,10 @@ print(os.environ["STUB_URL"])
         assert ("synthetic posting unavailable" in result.stderr) == post_fails
         recorded = [json.loads(line) for line in calls.read_text().splitlines()]
         assert len(recorded) == 1
-        assert url.split("#")[0] in recorded[0]
+        if platform == "github":
+            assert url.split("#")[0] in recorded[0]
+        else:
+            assert "https://gitlab.com/example/project" in recorded[0]
         assert payload.read_bytes() == report
     finally:
         subprocess.run(["rm", "-r", "--", str(run)], check=True)
@@ -206,7 +210,7 @@ def test_procedure_binds_real_checks_and_separate_outcomes() -> None:
         "Do not silently install",
         "Explicitly authorized reuse",
         "reset databases",
-        "return the gap in chat without writing a report",
+        "returns the gap in chat without writing a report",
     ):
         assert required in skill
 
@@ -218,7 +222,7 @@ def test_claim_qualification_preserves_report_and_draft_limits() -> None:
         "`reproduced`, `contradicted` or `unverified`",
         "Full contradiction must be explicit",
         "original ID, location, section, severity and merge identity",
-        "preserve the original report byte-for-byte",
+        "Preserve the original report byte-for-byte",
         "Carry only supported premises into a work draft",
         "excluded premises and gaps",
         "Stop for sponsor approval after each drafted follow-up",
@@ -235,3 +239,14 @@ def test_no_temporary_file_or_posting_helper() -> None:
     assert "scripts/artifacts.py" not in skill
     assert "--approved-file" not in skill
     assert "There is no posting helper" in skill
+
+
+def test_rule_owners_and_created_directory_wording() -> None:
+    skill = " ".join(text().split())
+    assert "reserved" not in skill.lower() and "reserving" not in skill.lower()
+    assert skill.count("Triage posts nothing") == 1
+    assert skill.count("create one directory with `mktemp -d`") == 1
+    assert skill.count("posting-text parsing") == 1
+    assert "qualify every material claim using Verification's claim rules" in skill
+    assert "glab mr note <mr-iid> --repo" in skill
+    assert "glab mr note create" not in skill
