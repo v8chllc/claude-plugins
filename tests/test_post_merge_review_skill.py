@@ -41,7 +41,7 @@ def test_review_role_wiring_and_unchanged_evidence_gate() -> None:
         "sequential-fallback",
         "No poster or fixer runs",
         "unchanged",
-        "posts its report and changes no source",
+        "Post the complete review through Report comments",
         "snapshot",
     ):
         assert phrase in review
@@ -77,21 +77,23 @@ def test_terminal_signal_contract() -> None:
 
 
 def test_triage_is_read_only_vetted_and_checkpointed() -> None:
-    triage = text().split("## Triage run\n")[1].split("## Review terminal signals\n")[0]
+    triage = " ".join(
+        text().split("## Triage run\n")[1].split("## Report comments\n")[0].split()
+    )
     for phrase in (
         "validate <report>",
         "Invalid input stops",
-        "merge commit",
+        "recorded merge code",
         "report order",
-        "reported",
-        "severity",
+        "Verification's claim rules",
+        "severity alignment",
         "Urgent follow-up",
         "Routine follow-up",
         "Optional follow-up",
         "No action",
         "never raises",
         "read-only",
-        "never creates a tracker",
+        "Triage posts nothing",
         "Stop for sponsor approval after each drafted follow-up",
         "no switch that disables vetting or severity alignment",
         "Noted",
@@ -100,37 +102,30 @@ def test_triage_is_read_only_vetted_and_checkpointed() -> None:
         "never learns where follow-ups are filed",
     ):
         assert phrase in triage
-    assert "`### Must Fix` starts at\n   `Urgent follow-up`" in triage
+    assert "`### Must Fix` starts at `Urgent follow-up`" in triage
     assert "`### Should Fix` starts at `Routine follow-up`" in triage
 
 
 def test_every_fresh_role_receives_post_merge_authority_context() -> None:
-    text = " ".join(SKILL.read_text().split())
-    reviewers = text.split("3. **Delegate independent reviews.**")[1].split(
-        "4. **Apply the evidence gate unchanged.**"
+    skill = " ".join(text().split())
+    reviewers = skill.split("3. **Delegate independent reviews.**")[1].split(
+        "4. **Apply the evidence gate.**"
     )[0]
     for restriction in (
-        "Append the following invocation-specific context after each unchanged prompt",
-        "every initial, fallback and retry invocation",
-        "actual prepared repository root, merge SHA, absolute external run directory",
-        "caller-prepared compatible dependencies and safe selected-check environment",
-        "explicit workspace/database-reuse authorization and its limits",
-        "generic role directions to install dependencies or write external scratch "
-        "are narrowed",
-        "do not install tools/dependencies",
-        "Do not let a check bootstrap missing dependencies",
-        "Leave unprepared or unsafe checks unrun",
-        "Existing evidence-gate requirements still apply",
-        "only in the supplied external run directory",
-        "role-prefixed names",
-        "No outside scratch writes",
-        "private-backup changes",
+        "Append this invocation context to every role and synthesizer prompt, "
+        "including retries",
+        "Actual repository root, merge SHA, external run directory",
+        "caller-prepared dependencies/check environment with any reuse limits",
+        "No installation, dependency bootstrapping, fetching, ref switching",
+        "checkout repair, database reset or backup restoration",
+        "Leave unprepared or unsafe checks unrun and name gaps without claiming a pass",
+        "Temporary files only in that directory with role-prefixed names",
+        "no source, environment, ignore-rule, input-report or private-backup changes",
+        "Return review text directly",
     ):
         assert restriction in reviewers
-    synthesizer = text.split("5. **Synthesize once evidence passes.**")[1].split(
-        "6. **Format, validate, post and return.**"
+    synthesizer = skill.split("5. **Synthesize.**")[1].split(
+        "6. **Format, validate and return.**"
     )[0]
-    assert "Append the complete invocation-specific context from step 3" in synthesizer
-    assert "every synthesis retry" in synthesizer
-    assert "fresh context must receive these limits explicitly" in synthesizer
-    assert "The synthesizer alone decides score and status" in synthesizer
+    assert "invocation context from step 3" in synthesizer
+    assert "The synthesizer alone decides score/status" in synthesizer

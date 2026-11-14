@@ -34,7 +34,7 @@ Use the current Python executable for these selected commands from the project:
 | contradicted impact | `from sample import render; assert render([1]) == 1; print('nonempty input succeeds')` | diagnostic; disproves “every input raises” only |
 
 Prevent Python bytecode writes with `PYTHONDONTWRITEBYTECODE=1`, and direct any
-other generated evidence into the reserved external temporary run. For a finding-bearing
+other generated evidence into the created external temporary run. For a finding-bearing
 report the passing command alone leaves that finding's untested clauses
 unverified, hence incomplete. Also exercise a valid clean review with no
 findings and the passing command: that case can be passed. The failing and
@@ -67,7 +67,7 @@ local report. Do not change ignore rules or create a temporary-file helper.
 For posting, use recording stub `gh` and `glab` executables first on PATH; never
 post validation evidence to a real platform. Follow Review's and Verification's
 own posting step with their complete produced reports, using the literal direct
-CLI command in SKILL.md with the resolved synthetic PR/MR URL and report path.
+CLI command in SKILL.md with the resolved synthetic PR URL or GitLab project URL plus MR IID and report path.
 For each procedure/platform pair, inspect one CLI call, the complete submitted
 report and the returned comment URL. No approval interaction, approved-text
 copy, text parser, link scanner or read-back call is involved. Include ordinary
@@ -86,3 +86,16 @@ ports compare baseline definitions with baseline definitions, then head
 definitions and this same scenario matrix at both heads. Identify all four
 commits and only necessary role/path wiring differences. This recipe needs no
 platform calls, installation, real publication, filing or product fixes.
+
+For GitLab also inspect installed `glab --version`, `glab mr note --help` and
+`glab mr note create --help`. Confirm the selected default operation is not
+marked experimental; do not substitute the experimental create subcommand.
+Exercise the real installed CLI against a disposable localhost GitLab API fixture
+with synthetic configuration and credentials: expect one notes POST for the
+resolved project and IID and a printed `#note_<id>` URL. This establishes command
+acceptance separately from the recording stub's report-content checks.
+
+For the wording audit, record SKILL.md word counts at both baselines and both
+heads. List any rule still stated twice and check every rule against AC-1–AC-6
+or a Regression Guard. Fresh-role handoffs repeat only the limits they need;
+check that temporary directories are called created and Triage posts nothing.
