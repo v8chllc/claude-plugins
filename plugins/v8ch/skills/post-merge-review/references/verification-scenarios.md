@@ -53,37 +53,32 @@ missing prerequisite, started=false and no exit result. Reuse the prepared
 workspace for the available checks with explicit caller authorization; no fresh
 checkout or environment is required.
 
-For artifacts, snapshot tracked and untracked source bytes and `.gitignore`,
-retain a private-backup sentinel, and run the artifact helper before temporary
-writes. Exercise Review, Verification, Triage and Publish with no output ignore
-rule. Give every delegated reviewer and synthesizer the actual external run
-directory and exclusive-output checks; inspect role evidence there. Return full
-reports in conversation, then settle roles and clean up the directory, including
-abort/decline/error paths. Repeat at the same merge and confirm unique temporary
-directories, their absence afterward, and unchanged source and sentinel bytes.
-Supply the returned review later from conversation, a comment and a caller file;
-no procedure relies on a retained local report. Test rejection of symlink and
-parent escapes without modifying the target. Do not change ignore rules.
+For temporary files, snapshot tracked and untracked source bytes and
+`.gitignore`, retain a private-backup sentinel, and create one external directory
+with `mktemp -d`. Exercise Review, Verification and Triage with no output ignore
+rule. Give every delegated reviewer and synthesizer the actual directory;
+inspect role evidence there. Return full reports in conversation, settle roles
+and remove the directory with `rm -r`, including abort/decline/error paths.
+Repeat at the same merge and confirm unique directories, their absence afterward,
+and unchanged source and sentinel bytes. Supply the returned review later from
+conversation, a comment and a caller file; no procedure relies on a retained
+local report. Do not change ignore rules or create a temporary-file helper.
 
-For Publish, use recording stub `gh` and `glab` executables first on PATH; never
-post validation evidence to a real platform. Present the exact complete comment
-and destination; simulate explicit sponsor approval and only then create the
-helper's temporary approved-text copy. Run Publish, capture stub arguments and
-JSON input, and assert one POST containing exactly the approved text followed
-by one GET returning the same body and a usable comment URL. For GitLab use the
-notes endpoint and note anchor; for GitHub use issue comments. Repeat with
-approval declined (no CLI call), changed text (no CLI call), a local-file link
-(no CLI call), and a stub read-back body mismatch (report failure, no retry,
-edit or deletion). Repeat local-link rejection for full, collapsed and shortcut
-Markdown references,
-angle and multiline reference definitions, definitions inside quote/list
-containers, HTML href values with double/single/no quotes and entity encoding,
-and local image sources. Reject these before any platform call. Check remote
-inline/reference/HTML/image links and anchors still post the exact approved
-bytes, including line endings. Inspect cleanup on every path. A file is only
-the helper's
-input representation: sponsor interaction supplies the authority. No fixture
-alone establishes the conversational approval gate; exercise the skill step.
+For posting, use recording stub `gh` and `glab` executables first on PATH; never
+post validation evidence to a real platform. Follow Review's and Verification's
+own posting step with their complete produced reports, using the literal direct
+CLI command in SKILL.md with the resolved synthetic PR/MR URL and report path.
+For each procedure/platform pair, inspect one CLI call, the complete submitted
+report and the returned comment URL. No approval interaction, approved-text
+copy, text parser, link scanner or read-back call is involved. Include ordinary
+`File:` prose, Markdown reference/HTML links and CRLF text to ensure posting
+adds no text filtering. A stub posting failure must be reported with the report
+and no claimed comment URL or automatic retry; cleanup still runs.
+
+The tests in `tests/test_post_merge_review_verification.py` execute the shipped
+CLI examples with recording stubs and the literal `mktemp -d` / `rm -r`
+instructions. These shell checks support AC-4 and AC-6; they do not substitute
+for the agent's actual Review, Verification and Triage scenario exercises above.
 
 Record every command, actual output/exit status, report byte comparison,
 source/environment/private-backup comparison and resulting signal. For paired
