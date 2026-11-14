@@ -250,3 +250,31 @@ def test_rule_owners_and_created_directory_wording() -> None:
     assert "qualify every material claim using Verification's claim rules" in skill
     assert "glab mr note <mr-iid> --repo" in skill
     assert "glab mr note create" not in skill
+
+
+def test_triage_references_claim_policy_without_repeating_it() -> None:
+    skill = " ".join(text().split())
+    verification = skill.split("## Verification run ")[1].split("## Triage run ")[0]
+    triage = skill.split("## Triage run ")[1].split("## Report comments ")[0]
+    assert (
+        "Visibly reject a contradicted impact even when failure reproduces"
+        in verification
+    )
+    assert "Full contradiction must be explicit" in verification
+    assert "qualify every material claim using Verification's claim rules" in triage
+    assert "Visibly distinguish partial from full contradiction" not in triage
+    assert "a reproduced core never validates an unsupported impact" not in triage
+    assert "Carry only supported premises into a work draft" in triage
+    assert "A fully contradicted finding becomes No action" in triage
+    assert "Stop for sponsor approval after each drafted follow-up" in triage
+
+
+def test_triage_destination_boundary_has_one_owner() -> None:
+    triage = (
+        " ".join(text().split())
+        .split("## Triage run ")[1]
+        .split("## Report comments ")[0]
+    )
+    assert "never learns where follow-ups are filed" in triage
+    assert triage.count("where follow-ups are filed") == 1
+    assert "Do not discover or ask" not in triage

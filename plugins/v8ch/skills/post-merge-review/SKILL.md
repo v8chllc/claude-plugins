@@ -216,14 +216,13 @@ Input: one shared-format report from the caller. Read it completely and run
 `scripts/report_contract.py validate <report>`. Invalid input stops: never vet
 a partial, malformed or unsupported report. Triage is interactive and
 source-read-only; Triage posts nothing. There is no switch that disables vetting
-or severity alignment. Do not discover or ask where follow-ups are filed.
+or severity alignment.
 
 1. Resolve repository from caller context and confirm recorded merge code with
    `git show <merge_commit>:<path>`. Inspect that code, not today's tree.
    Missing identity/code stops with an explanation, never an unvetted approval.
 2. Visit each finding in report order and qualify every material claim using
-   Verification's claim rules. Visibly distinguish partial from full
-   contradiction; a reproduced core never validates an unsupported impact.
+   Verification's claim rules.
    Assign exactly one disposition: `Urgent follow-up`, `Routine follow-up`,
    `Optional follow-up` or `No action`. A finding under `### Must Fix` starts at
    `Urgent follow-up`; one under `### Should Fix` starts at `Routine follow-up`.
