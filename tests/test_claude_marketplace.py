@@ -43,7 +43,7 @@ def test_marketplace_points_to_valid_plugin_manifest() -> None:
 
     manifest = load_json(plugin_root / ".claude-plugin" / "plugin.json")
     assert manifest["name"] == entry["name"]
-    assert manifest["version"] == "2.0.20"
+    assert manifest["version"] == "2.0.21"
     assert manifest["description"]
 
 
@@ -62,6 +62,11 @@ def test_all_plugin_skills_have_metadata() -> None:
     skill_root = REPO_ROOT / "plugins" / "v8ch" / "skills"
     skill_files = sorted(skill_root.glob("*/SKILL.md"))
     assert {path.parent.name for path in skill_files} == {
+        "agent-tooling-review",
+        "change-set-orchestrate",
+        "chore-orchestrate",
+        "feature-orchestrate",
+        "supervise",
         "consensus-review",
         "post-merge-review",
         "recommend",
@@ -80,6 +85,17 @@ def test_plugin_agents_use_claude_plugin_frontmatter() -> None:
     agent_root = REPO_ROOT / "plugins" / "v8ch" / "agents"
     agent_files = sorted(agent_root.glob("*.md"))
     assert {path.stem for path in agent_files} == {
+        "change-set-build-agent",
+        "change-set-plan-agent",
+        "change-set-review-agent",
+        "change-set-verify-agent",
+        "chore-build-agent",
+        "chore-check-agent",
+        "chore-review-agent",
+        "feature-build-agent",
+        "feature-plan-agent",
+        "feature-review-agent",
+        "feature-verify-agent",
         "architecture-reviewer",
         "consensus-review-fixer",
         "consensus-review-poster",
@@ -92,10 +108,22 @@ def test_plugin_agents_use_claude_plugin_frontmatter() -> None:
         frontmatter = parse_frontmatter(agent_file)
         assert frontmatter["name"] == agent_file.stem
         assert frontmatter["description"]
-        assert frontmatter["model"] in {"inherit", "sonnet", "opus", "haiku"}
-        assert frontmatter["color"] in ALLOWED_AGENT_COLORS
-        assert isinstance(frontmatter["tools"], list)
-        assert all(isinstance(tool, str) and tool for tool in frontmatter["tools"])
+        # Promoted roles keep their source metadata. Claude defaults an omitted
+        # model to inherit and omitted tools to the parent tool set; color is
+        # optional. Existing consensus roles retain their explicit checks.
+        promoted = agent_file.stem.startswith(("change-set-", "chore-", "feature-"))
+        if not promoted or "model" in frontmatter:
+            assert frontmatter["model"] in {"inherit", "sonnet", "opus", "haiku"}
+        if not promoted or "color" in frontmatter:
+            assert frontmatter["color"] in ALLOWED_AGENT_COLORS
+        if not promoted:
+            assert isinstance(frontmatter["tools"], list)
+        if "tools" in frontmatter:
+            tools = frontmatter["tools"]
+            if isinstance(tools, str):
+                tools = [tool.strip() for tool in tools.split(",")]
+            assert isinstance(tools, list)
+            assert all(isinstance(tool, str) and tool for tool in tools)
         if "effort" in frontmatter:
             assert frontmatter["effort"] in ALLOWED_AGENT_EFFORTS
 
