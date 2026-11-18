@@ -1,0 +1,15 @@
+# Participating repository set
+
+A feature run may bind implementation in one or more participating repositories. The run issue lists the set and each repository issue is its sub-issue when tracking is required. A split delivery is different: separate runs deliver separate parts after the earlier pull request merges. The manager resolves one profile, baseline, branch, retained builder, review budget, pull request, and verification result per member. One member uses the same lifecycle with a one-entry set.
+
+## Canonical commit identity
+
+Use a map of full `owner/repo` names to full 40-character commit SHAs, sorted by repository name. The same complete map appears in freeze records and each affected pull request's verifier result. At freeze, confirm every live pull request head equals its reviewed head, or meets the automatic test-only fix round after a `gap` or coverage-row `not_verified`, and pin the map as `frozen_commits`. The verifier runs the mapped checks in clean detached checkouts, including one joint check when an `AC-n` requires the repositories' interaction. Independent local passes do not establish a joint criterion. Compare live heads once before linking results and once at merge-ready. A changed member invalidates dependent verification. For the one automatic test-only fix round, confirm only tests addressing the `gap` or coverage-row `not_verified` changed from the last clean reviewed head, then freeze and re-verify affected criteria and their paired sponsor rows without a separate review. Any other test-only, documentation, or product-code change returns to review and a new freeze before verification. Never reuse an integrated result after any member changes.
+
+## Slice scheduling
+
+The approved plan records a dependency DAG of bounded slices, each with a repository owner, and chooses a stable order for independent slices. The manager dispatches one eligible slice at a time to that repository's retained builder. An unfinished predecessor prevents dispatch. A failed focused or broad gate holds advancement for the same builder to correct the failed slice. Resume only after all required checks pass. Three consecutive failures of the same gate, or a correction requiring a scope decision, stops for sponsor direction. Do not dispatch another repository's eligible slice while this failure hold is open.
+
+## Joint verification and publication
+
+The plan names a harness owner, verification owner, and publication home for integrated criteria. One fresh verifier runs the integrated harness once at the complete frozen map and includes its command, output, and verdict in each affected pull request's result comment. The verifier posts each comment itself and returns URLs keyed by affected pull request. It does not copy a single repository's result to siblings. A shared criterion receives the same joint verdict and map across comments. The manager confirms every result URL, map, and live head before merge readiness. A missing or mismatched result stops `BLOCKED`.

@@ -1,0 +1,3 @@
+# Client integration review
+
+Trace the target client's actual discovery and invocation path: repository files, installation location, configuration, agent or skill name, tools, and environment. Check relative paths from the runtime working directory, not just the source checkout. Follow one intended activation and one non-activation path where feasible. Compare cross-toolchain ports by behavior while respecting their distinct metadata and path syntax. If the client is unavailable, report that gap and restrict conclusions to source and configuration evidence. For version-sensitive behavior, consult current official client documentation and record the version or date used.
