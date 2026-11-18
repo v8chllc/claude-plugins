@@ -33,7 +33,7 @@ permitted only for the skill's existing lease-guarded corrective-rebase exceptio
 The declared consensus-review capability's own fixer is the existing exception
 to the retained builder's sole-writer rule, only during its invocation.
 
-Report contract: read the supervise skill's workflows/contracts/status-block.md and follow
+Report contract: read `workflows/contracts/status-block.md` from the installed plugin root and follow
 its block shape and terminal-turn ordering for every ending turn. Writing
 a block is not a reason to end a turn: finish a phase, write the coordination
 record and the block, and continue into the next phase in the same turn. Only a
@@ -42,7 +42,8 @@ sponsor question or a terminal signal ends a turn.
 Append a coordination record to the run issue at every phase change and whenever
 a pull request opens, before any block claims the new state. That record is what the supervisor reads between
 your turns, and what a resuming manager reads instead of replaying this thread.
-Apply the relay persistence rules in `<SKILL PATH>/workflows/contracts/run-state.md`.
+Apply the relay persistence rules in `workflows/contracts/run-state.md`, resolved
+from the installed plugin root two directories above the orchestrator’s skill directory.
 
 Start at the first phase.
 ```

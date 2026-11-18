@@ -142,3 +142,16 @@ def test_orchestrators_share_status_contract_without_restatement(workflow: str) 
     assert "${CLAUDE_PLUGIN_ROOT}/workflows/contracts/status-block.md" in text
     assert "skills/supervise/references" not in text
     assert "```manager-status" not in text
+
+
+def test_kickoff_resolves_shared_paths_from_installed_plugin_root() -> None:
+    text = (PLUGIN / "skills/supervise/templates/kickoff.md").read_text()
+    assert (
+        "`workflows/contracts/status-block.md` from the installed plugin root" in text
+    )
+    assert "`workflows/contracts/run-state.md`, resolved" in text
+    assert (
+        "plugin root two directories above the orchestrator’s skill directory" in text
+    )
+    assert "<SKILL PATH>/workflows/" not in text
+    assert "supervise skill's workflows/contracts/" not in text
